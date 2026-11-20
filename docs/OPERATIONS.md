@@ -37,7 +37,7 @@ docker compose -f docker-compose.dev.yml up --build
 - Admin: Unix socket path from config (e.g. `/run/sedat/admin.sock`).
 - Optional metrics sidecar: `server.metrics_listen = "127.0.0.1:9090"` (loopback only).
 
-## systemd (sketch)
+## systemd
 
 Unit file: [`deploy/sedat.service`](../deploy/sedat.service).
 
@@ -45,6 +45,17 @@ Unit file: [`deploy/sedat.service`](../deploy/sedat.service).
 - Start as root (or with `CAP_NET_BIND_SERVICE`), drop via SeDat config `user`/`group`.
 - `ProtectSystem=strict`, `PrivateTmp=true`, `NoNewPrivileges=true` recommended.
 - Align with `[hardening] landlock/seccomp = "auto"` inside the process.
+- **cgroup limits (P10.10):** `MemoryHigh=384M`, `MemoryMax=512M`, `TasksMax=4096`,
+  `LimitNOFILE=65535`, `CPUQuota=200%` — tune for the host; see
+  [phases/P10_10_systemd_memory.md](phases/P10_10_systemd_memory.md).
+
+```bash
+sudo cp deploy/sedat.service /etc/systemd/system/
+sudo systemctl daemon-reload
+systemd-analyze verify /etc/systemd/system/sedat.service
+sudo systemctl enable --now sedat
+systemctl show sedat -p MemoryMax -p MemoryHigh -p TasksMax
+```
 
 ## Docker hardening
 
@@ -56,6 +67,8 @@ See [`deploy/Dockerfile`](../deploy/Dockerfile) and compose:
 - optional host profile: `security_opt: ["seccomp=deploy/seccomp/sedat.json"]`
   (SeDat also applies an in-process BPF allowlist when `hardening.seccomp` ≠ `off`)
 - read-only rootfs + writable state volume
+- **memory/pids (P10.10):** Compose `mem_limit` / `mem_reservation` / `pids_limit`
+  mirror the systemd ceilings (see `docker-compose.dev.yml` proxy profile).
 
 Seccomp modes: [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md).
 

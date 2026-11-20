@@ -90,6 +90,12 @@ audit_jsonl = ""                  # empty = disabled; e.g. "./state/audit.jsonl"
 audit_jsonl_max_bytes = 10485760  # rotate to *.jsonl.1; 0 = never
 ```
 
+## Deploy resource caps (not TOML)
+
+Process memory/PID/FD ceilings live in the systemd unit / Compose, not in
+`sedat.toml`. Defaults: see [OPERATIONS.md](OPERATIONS.md) and
+[phases/P10_10_systemd_memory.md](phases/P10_10_systemd_memory.md).
+
 ## Validation
 
 All client-visible string fields (hosts, paths, header names, upstream URLs) are validated with **regex** and semantic checks. Failures are fail-closed.

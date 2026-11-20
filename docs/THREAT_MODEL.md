@@ -53,6 +53,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 | T15 | Upstream DNS rebinding / unexpected peer | Optional `upstream_allowlist` pin; fail-closed connect | `tests/upstream_pin.rs` |
 | T16 | Spoofed / unauthenticated upstream | Optional HTTPS + mTLS (`upstream_mtls_*`, default off) | `tests/upstream_mtls.rs` |
 | T17 | Mass ACME renewal stampedes | Prefer ARI windows; expiry fallback (`renew_days_before`) | `tests/acme_ari.rs` |
+| T18 | Host resource exhaustion via proxy | systemd `MemoryMax`/`TasksMax`/`LimitNOFILE`; Docker mem/pids | `deploy/sedat.service`, `tests/systemd_unit.rs` |
 
 ## PROXY Protocol policy (detail)
 

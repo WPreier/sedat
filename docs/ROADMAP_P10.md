@@ -1,8 +1,9 @@
 # SeDat – Roadmap P10 (Ops / Edge Hardening)
 
 Phase **P10** schedules remaining extras from [ROADMAP_P09.md](ROADMAP_P09.md) plus
-cross-cutting correlation and edge controls. **E8** (HTTP/3 attack corpus) and
-**E9** (config signing) are **explicitly skipped** for this phase.
+cross-cutting correlation and edge controls. **Status: complete** (steps 1–10).
+**E8** (HTTP/3 attack corpus) and **E9** (config signing) remain **explicitly
+skipped** for this phase (E8 = later).
 
 **Do not edit** Cursor plan files — this roadmap is the source of truth for P10.
 Implement as **separate steps**; after each step: Zwischenfazit, verification,
@@ -154,10 +155,11 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending |
+| **Status** | **done** |
 | **Depends on** | `deploy/sedat.service` |
-| **Behavior** | `MemoryMax=` / related cgroup knobs in unit |
-| **Verify** | Unit file review; optional systemd-nspawn/smoke on Linux |
+| **Behavior** | `MemoryHigh`/`MemoryMax`/`TasksMax`/`LimitNOFILE`/`CPUQuota` in unit; Docker mem/pids mirror |
+| **Verify** | `cargo test --test systemd_unit`; `systemd-analyze verify` on Linux hosts |
+| **Phase note** | [phases/P10_10_systemd_memory.md](phases/P10_10_systemd_memory.md) |
 
 ---
 
@@ -183,7 +185,13 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 | 7 | E1 optional mTLS Upstream | **done** |
 | 8 | E2 ACME ARI | **done** |
 | 9 | E7 Seccomp-BPF | **done** |
-| 10 | systemd Memory/cgroup Limits | pending |
+| 10 | systemd Memory/cgroup Limits | **done** |
+
+## P10 status
+
+**P10 backlog complete** for the approved sequence (steps 1–10). Explicitly out of
+scope for this phase: **E8** HTTP/3 attack corpus (**later**), **E9** config
+signing (**no**).
 
 ## Doc & test deliverables
 
