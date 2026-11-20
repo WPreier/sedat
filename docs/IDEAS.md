@@ -23,7 +23,8 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 - JSONL audit sink (E5) — **done** (`logging.audit_jsonl`)
 - Temporary IP bans after rate-limit series — **done** (`ban_after_rate_limit_strikes`)
 - Admin capability tokens (E4) — **done** (`AUTH` / `SEDAT_ADMIN_TOKEN`)
-- Admin selftest (E6), upstream IP pin (E3), optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
+- Admin selftest (E6) — **done** (`selftest`)
+- Upstream IP pin (E3), optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
 - Admin `unban` / list bans — deferred (needs Limiter admin surface)
 
 ## Open / later (see also ROADMAP_P09 extras / P10)

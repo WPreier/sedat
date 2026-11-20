@@ -1,11 +1,14 @@
 //! Unix-domain admin socket (status / reload / cert-info) + optional loopback metrics sidecar.
 
 mod auth;
+mod selftest;
 
 pub use auth::{parse_auth_line, resolve_admin_token, token_matches, ADMIN_TOKEN_ENV};
+pub use selftest::{run_selftest, SelftestCheck, SelftestReport};
 
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Instant;
 
 use arc_swap::ArcSwap;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -31,6 +34,8 @@ pub struct AdminState {
     pub acme_status: Option<Arc<parking_lot::Mutex<AcmeStatus>>>,
     /// Shared JSONL audit sink.
     pub audit: AuditSink,
+    /// Process/admin start time (uptime for selftest).
+    pub started_at: Instant,
 }
 
 /// Apply admin socket filesystem ACL: `0600` owner-only, or `0660` + group when configured.
@@ -210,9 +215,9 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
     }
     if cmd == "help" {
         let help = if token_required {
-            "commands: AUTH <token> | status | health | metrics | reload | cert | quit\n"
+            "commands: AUTH <token> | status | health | metrics | reload | cert | selftest | quit\n"
         } else {
-            "commands: status | health | metrics | reload | cert | quit\n"
+            "commands: status | health | metrics | reload | cert | selftest | quit\n"
         };
         return (help.into(), false);
     }
@@ -257,6 +262,21 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
             Err(e) => format!("ERR reload: {e}\n"),
         },
         "cert" | "cert-info" | "cert_info" => format_cert(state),
+        "selftest" | "self-test" | "self_test" => {
+            let report = run_selftest(state);
+            let failed = report.failed_names();
+            state.audit.emit_admin_selftest(report.ok(), &failed);
+            if report.ok() {
+                info!(target: "sedat::audit", "admin selftest ok");
+            } else {
+                warn!(
+                    target: "sedat::audit",
+                    failed = %failed.join(","),
+                    "admin selftest failed"
+                );
+            }
+            report.format_reply()
+        }
         other => format!("ERR unknown command: {other}\n"),
     };
     (reply, false)
@@ -328,6 +348,7 @@ mod tests {
             limiter: Limiter::new(Default::default()),
             acme_status: None,
             audit,
+            started_at: Instant::now(),
         }
     }
 
@@ -406,6 +427,35 @@ mod tests {
         let mut authed = false;
         let (r, _) = dispatch_admin_line(&state, &mut authed, "health");
         assert_eq!(r, "OK healthy\n");
+    }
+
+    #[test]
+    fn selftest_command_ok() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = SedatConfig {
+            schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.state_dir = dir.path().to_string_lossy().into();
+        cfg.server.admin_socket = dir.path().join("a.sock").to_string_lossy().into();
+        let audit_path = dir.path().join("audit.jsonl");
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let state = sample_state_with(cfg, audit);
+        let mut authed = false;
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "selftest");
+        assert!(r.starts_with("OK selftest\n"), "{r}");
+        let text = std::fs::read_to_string(&audit_path).unwrap();
+        assert!(text.contains("\"event\":\"admin_selftest\""));
+        assert!(text.contains("\"ok\":true"));
     }
 
     #[test]

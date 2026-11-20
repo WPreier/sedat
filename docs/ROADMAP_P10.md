@@ -100,10 +100,11 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending |
+| **Status** | **done** |
 | **Depends on** | P10.4 (auth); PROXY/TLS/limits surfaces |
-| **Behavior** | Admin `selftest`: PROXY probe, TLS ALPN, limit counters |
-| **Verify** | Admin command returns structured OK/FAIL; Docker smoke |
+| **Behavior** | Admin `selftest`: config/listens/state/PROXY encode/limits/TLS paths/uptime; JSONL `admin_selftest` |
+| **Verify** | `cargo test selftest` |
+| **Phase note** | [phases/P10_05_admin_selftest.md](phases/P10_05_admin_selftest.md) |
 
 ### P10.6 – E3 Upstream-IP-Pin
 
@@ -171,7 +172,7 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 | 2 | E5 JSONL-Audit-Log | **done** |
 | 3 | Temporäre IP-Bans + Logging | **done** |
 | 4 | E4 Admin-Tokens | **done** |
-| 5 | E6 Admin-selftest | pending |
+| 5 | E6 Admin-selftest | **done** |
 | 6 | E3 Upstream-IP-Pin | pending |
 | 7 | E1 optional mTLS Upstream | pending |
 | 8 | E2 ACME ARI | pending |
