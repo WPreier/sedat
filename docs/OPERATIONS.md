@@ -127,6 +127,7 @@ echo selftest| socat - UNIX-CONNECT:/run/sedat/admin.sock
 
 - Admin commands `health` / `metrics` (Prometheus text exposition).
 - Optional loopback HTTP sidecar (`GET /metrics`) when `metrics_listen` is set.
+- Includes `sedat_audit_dropped_total` (P11.4) for JSONL audit drops.
 - Script: `scripts/prometheus_admin_scrape.sh [admin.sock]`.
 - No built-in public HTTP `/metrics` or `/health` control endpoint.
 
@@ -173,8 +174,10 @@ audit_jsonl_max_bytes = 10485760
 Events (one JSON object per line): `startup`, `config_reload` (security-diff), `proxy_deny`
 (with `request_id` when available), `proxy_reject` (inbound PROXY policy fail, pre-HTTP),
 `ip_ban` / `ip_unban`, `admin_unban`. Contended writes are dropped
-(non-blocking). See [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md),
-[phases/P11_03_proxy_reject_jsonl.md](phases/P11_03_proxy_reject_jsonl.md).
+(non-blocking; count as `sedat_audit_dropped_total`). See
+[phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md),
+[phases/P11_03_proxy_reject_jsonl.md](phases/P11_03_proxy_reject_jsonl.md),
+[phases/P11_04_audit_dropped_metrics.md](phases/P11_04_audit_dropped_metrics.md).
 
 ## Upstream IP pin
 

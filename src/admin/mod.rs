@@ -344,12 +344,16 @@ pub fn prometheus_text(state: &AdminState) -> String {
          sedat_inbound_proxy_enabled {}\n\
          # HELP sedat_inbound_proxy_after_tls Inbound PROXY placement is after_tls.\n\
          # TYPE sedat_inbound_proxy_after_tls gauge\n\
-         sedat_inbound_proxy_after_tls {}\n",
+         sedat_inbound_proxy_after_tls {}\n\
+         # HELP sedat_audit_dropped_total JSONL audit events dropped (lock busy or I/O error).\n\
+         # TYPE sedat_audit_dropped_total counter\n\
+         sedat_audit_dropped_total {}\n",
         crate::VERSION,
         state.limiter.active_connections(),
         cfg.schema_version,
         u8::from(cfg.proxy_protocol.inbound_enabled),
         u8::from(cfg.proxy_protocol.inbound_placement == "after_tls"),
+        state.audit.dropped(),
     )
 }
 
@@ -409,6 +413,62 @@ mod tests {
         assert!(metrics.contains("sedat_connections_active"));
         assert!(metrics.contains("sedat_schema_version 1"));
         assert!(metrics.contains("# TYPE sedat_info gauge"));
+        assert!(metrics.contains("# TYPE sedat_audit_dropped_total counter"));
+        assert!(metrics.contains("sedat_audit_dropped_total 0"));
+    }
+
+    #[test]
+    fn metrics_expose_audit_dropped_counter() {
+        let dir = tempfile::tempdir().unwrap();
+        let audit_path = dir.path().join("a.jsonl");
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let cfg = SedatConfig {
+            schema_version: 1,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        let state = sample_state_with(cfg, audit.clone());
+
+        let before = prometheus_text(&state);
+        assert!(before.contains("sedat_audit_dropped_total 0"), "{before}");
+
+        // Hold the audit lock so a concurrent emit is dropped (non-blocking).
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let holder = audit.clone();
+        let t = std::thread::spawn(move || {
+            holder.with_lock_held_for_test(|| {
+                ready_tx.send(()).unwrap();
+                done_rx.recv().unwrap();
+            });
+        });
+        ready_rx.recv().unwrap();
+        audit.emit_proxy_deny("rate_limit", 429, "127.0.0.1:1", Some("drop-me"), None, None);
+        assert!(audit.dropped() >= 1);
+        done_tx.send(()).unwrap();
+        t.join().unwrap();
+
+        let after = prometheus_text(&state);
+        assert!(
+            after.contains(&format!("sedat_audit_dropped_total {}", audit.dropped())),
+            "{after}"
+        );
+
+        let mut authed = false;
+        let (reply, _) = dispatch_admin_line(&state, &mut authed, "metrics");
+        assert!(reply.starts_with("OK metrics\n"), "{reply}");
+        assert!(
+            reply.contains("sedat_audit_dropped_total"),
+            "admin metrics missing counter: {reply}"
+        );
     }
 
     #[test]

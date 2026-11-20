@@ -37,6 +37,7 @@ Common fields: `ts` (RFC3339), `v`, `event`, `request_id` (string or null), `pee
 ## Safety
 
 - Request path uses `try_lock`; contended / I/O failure → drop + counter (never blocks).
+- Counter exposed as Prometheus `sedat_audit_dropped_total` (P11.4).
 - Path validation rejects URLs / NUL; empty path disables.
 - Reload reconfigures the sink when `audit_jsonl` changes.
 

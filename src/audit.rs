@@ -60,9 +60,18 @@ impl AuditSink {
     }
 
     /// Events dropped because the sink lock was busy or I/O failed.
+    ///
+    /// Exposed as Prometheus counter `sedat_audit_dropped_total` (admin/metrics).
     #[must_use]
     pub fn dropped(&self) -> u64 {
         self.inner.dropped.load(Ordering::Relaxed)
+    }
+
+    /// Hold the sink lock while `f` runs (unit tests: force try_lock drops).
+    #[cfg(test)]
+    pub fn with_lock_held_for_test<R>(&self, f: impl FnOnce() -> R) -> R {
+        let _guard = self.inner.state.lock();
+        f()
     }
 
     /// Whether a path is currently configured.
@@ -399,5 +408,27 @@ mod tests {
         assert!(valid_audit_path("./state/audit.jsonl"));
         assert!(!valid_audit_path("https://evil.example/x"));
         assert!(!valid_audit_path("a\0b"));
+    }
+
+    #[test]
+    fn drops_when_lock_busy() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let s = AuditSink::open(path.to_str().unwrap(), 0).unwrap();
+        let s2 = s.clone();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let t = std::thread::spawn(move || {
+            s2.with_lock_held_for_test(|| {
+                ready_tx.send(()).unwrap();
+                done_rx.recv().unwrap();
+            });
+        });
+        ready_rx.recv().unwrap();
+        let before = s.dropped();
+        s.emit_startup("0.0.0-test");
+        assert!(s.dropped() > before);
+        done_tx.send(()).unwrap();
+        t.join().unwrap();
     }
 }
