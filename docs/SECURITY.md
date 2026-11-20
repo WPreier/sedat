@@ -25,6 +25,7 @@ Full write-up: **[THREAT_MODEL.md](THREAT_MODEL.md)** (assets, trust boundaries,
 | Privilege / RCE blast radius | Drop after bind; **Landlock + NO_NEW_PRIVS** (`[hardening]`, Linux `auto`) |
 | Log blocking | Async bounded channel; drop+metric on overflow |
 | Cert loss on renew fail | Hot-swap; keep previous cert on ACME failure |
+| Mass-renewal stampedes | Optional ACME ARI windows (RFC 9773); expiry fallback |
 | Admin exposure | Unix socket `0600` default, or `0660` + `server.admin_group`; optional capability token (`AUTH`); no public HTTP admin |
 | Metrics exposure | Admin socket / optional **loopback-only** sidecar; never public control plane |
 | Schema surprise upgrades | Exact `schema_version`; migrate helper fail-closed |
@@ -101,7 +102,8 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 - [x] Admin selftest (E6)
 - [x] Upstream IP pin (E3)
 - [x] Optional upstream mTLS (P10.7) — default off; see [phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md)
-- [ ] Optional ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
+- [x] ACME ARI (P10.8) — prefer CA windows, expiry fallback; see [phases/P10_08_acme_ari.md](phases/P10_08_acme_ari.md)
+- [ ] Optional seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
 
 ## Reporting
 

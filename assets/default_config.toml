@@ -21,6 +21,8 @@ email = "admin@example.com"
 domains = []
 dns_provider = "file"
 dns_file = "./state/acme-dns-challenge.txt"
+# ari = true                 # prefer RFC 9773 renewalInfo when CA supports it
+# renew_days_before = 30     # fallback when ARI unavailable
 
 [[routes.hosts]]
 host = "localhost"

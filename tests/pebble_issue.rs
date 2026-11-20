@@ -32,7 +32,7 @@ async fn pebble_dns01_issues_certificate() {
         domains: vec!["test.local".into()],
         dns_provider: "file".into(),
         dns_file: dns_file.to_string_lossy().into_owned(),
-        cloudflare_api_token: None,
+        ..Default::default()
     };
     let paths = AcmePaths::new(&state);
     let dns = Box::new(FileDnsProvider::new(dns_file));

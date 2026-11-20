@@ -1,13 +1,18 @@
-//! ACME issuance / renewal loop with fail-closed cert retention.
+//! ACME issuance / renewal loop with fail-closed cert retention and optional ARI.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use tracing::{info, warn};
 
 use crate::config::AcmeConfig;
 use crate::tls::{server_config_from_pem, TlsState};
 
+use super::ari::{
+    certificate_id_from_pem, not_after_from_pem, random_jitter_01, schedule_renewal, sleep_until,
+    RenewSchedule,
+};
+use super::ari_fetch::{fetch_ari_for_cert, fetch_renewal_info_base};
 use super::dns::DnsProvider;
 use super::{directory_url, persist_cert, AcmePaths};
 
@@ -20,6 +25,10 @@ pub struct AcmeStatus {
     pub last_error: Option<String>,
     /// Directory URL in use.
     pub directory: String,
+    /// Last ARI schedule reason (`ari_suggested_window`, `expiry_fallback`, …).
+    pub last_schedule_reason: Option<String>,
+    /// Whether the last schedule used a live ARI window.
+    pub ari_active: bool,
 }
 
 /// Manages ACME lifecycle; on failure keeps previous cert in [`TlsState`].
@@ -114,22 +123,104 @@ impl AcmeManager {
         self.install_cert(&cert_pem, &key_pem)
     }
 
-    /// Background renewal loop with exponential backoff on failure.
+    /// Background renewal loop: ARI window when available, else expiry fallback.
+    ///
+    /// Wakes at least every 24h to re-fetch ARI / re-evaluate. Failures use
+    /// exponential backoff; previous cert is always retained on order errors.
     pub async fn renewal_loop(self: Arc<Self>) {
         let mut backoff = Duration::from_secs(30);
         let max_backoff = Duration::from_secs(3600);
+        let max_sleep = Duration::from_secs(24 * 3600);
         loop {
-            match self.order_once().await {
-                Ok(()) => {
-                    backoff = Duration::from_secs(30);
-                    tokio::time::sleep(Duration::from_secs(24 * 3600)).await;
+            if !self.paths.cert_path.exists() || !self.paths.key_path.exists() {
+                info!("no certificate on disk; issuing");
+                match self.order_once().await {
+                    Ok(()) => backoff = Duration::from_secs(30),
+                    Err(_) => {
+                        tokio::time::sleep(backoff).await;
+                        backoff = (backoff * 2).min(max_backoff);
+                    }
                 }
-                Err(_) => {
-                    tokio::time::sleep(backoff).await;
-                    backoff = (backoff * 2).min(max_backoff);
+                continue;
+            }
+
+            match self.plan_renewal().await {
+                RenewSchedule::Now { reason } => {
+                    info!(reason, "ACME renewal due");
+                    match self.order_once().await {
+                        Ok(()) => backoff = Duration::from_secs(30),
+                        Err(_) => {
+                            tokio::time::sleep(backoff).await;
+                            backoff = (backoff * 2).min(max_backoff);
+                        }
+                    }
+                }
+                RenewSchedule::Later { at, reason } => {
+                    let now = SystemTime::now();
+                    let delay = sleep_until(now, at, max_sleep);
+                    info!(reason, ?delay, "ACME renewal sleep");
+                    tokio::time::sleep(delay).await;
                 }
             }
         }
+    }
+
+    /// Decide whether to renew now or sleep (ARI → expiry fallback → 24h).
+    pub async fn plan_renewal(&self) -> RenewSchedule {
+        let now = SystemTime::now();
+        let cert_pem = std::fs::read(&self.paths.cert_path).ok();
+        let not_after = cert_pem
+            .as_ref()
+            .and_then(|p| not_after_from_pem(p).ok());
+
+        let mut ari_window = None;
+        let mut ari_active = false;
+        if self.cfg.ari {
+            if let Some(ref pem) = cert_pem {
+                match self.try_fetch_ari(pem).await {
+                    Ok(Some(window)) => {
+                        ari_window = Some(window);
+                        ari_active = true;
+                    }
+                    Ok(None) => {
+                        info!("ACME ARI unavailable; using expiry fallback");
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "ACME ARI fetch failed; using expiry fallback");
+                    }
+                }
+            }
+        }
+
+        let schedule = schedule_renewal(
+            now,
+            ari_window.as_ref(),
+            not_after,
+            self.cfg.renew_days_before,
+            random_jitter_01(),
+        );
+        {
+            let mut st = self.status.lock();
+            st.ari_active = ari_active;
+            st.last_schedule_reason = Some(match &schedule {
+                RenewSchedule::Now { reason } => (*reason).to_string(),
+                RenewSchedule::Later { reason, .. } => (*reason).to_string(),
+            });
+        }
+        schedule
+    }
+
+    async fn try_fetch_ari(
+        &self,
+        cert_pem: &[u8],
+    ) -> Result<Option<super::ari::AriWindow>, String> {
+        let directory = directory_url(&self.cfg.directory);
+        let Some(base) = fetch_renewal_info_base(&directory).await? else {
+            return Ok(None);
+        };
+        let cert_id = certificate_id_from_pem(cert_pem)?;
+        let (info, _retry) = fetch_ari_for_cert(&base, &cert_id).await?;
+        Ok(Some(info.window))
     }
 }
 

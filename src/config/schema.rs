@@ -155,6 +155,15 @@ pub struct AcmeConfig {
     /// Cloudflare API token (env preferred in production).
     #[serde(default)]
     pub cloudflare_api_token: Option<String>,
+    /// Prefer ACME ARI (RFC 9773) when the CA directory exposes `renewalInfo`.
+    ///
+    /// Default **true** (safe): if ARI is unavailable, fall back to
+    /// `renew_days_before` against certificate `notAfter`.
+    #[serde(default = "default_acme_ari")]
+    pub ari: bool,
+    /// Days before cert `notAfter` to renew when ARI is off or unsupported (default 30).
+    #[serde(default = "default_renew_days_before")]
+    pub renew_days_before: u64,
 }
 
 fn default_acme_dir() -> String {
@@ -165,6 +174,12 @@ fn default_dns_provider() -> String {
 }
 fn default_dns_file() -> String {
     "./state/acme-dns-challenge.txt".into()
+}
+fn default_acme_ari() -> bool {
+    true
+}
+fn default_renew_days_before() -> u64 {
+    30
 }
 
 impl Default for AcmeConfig {
@@ -177,6 +192,8 @@ impl Default for AcmeConfig {
             dns_provider: default_dns_provider(),
             dns_file: default_dns_file(),
             cloudflare_api_token: None,
+            ari: default_acme_ari(),
+            renew_days_before: default_renew_days_before(),
         }
     }
 }

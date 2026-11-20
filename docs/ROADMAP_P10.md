@@ -132,10 +132,12 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending |
+| **Status** | **done** |
 | **Depends on** | ACME renew path |
-| **Behavior** | Prefer CA ARI windows when available; safe fallback |
-| **Verify** | Unit/mock ARI response; renew scheduler respects window |
+| **Config** | `acme.ari` (default true), `acme.renew_days_before` (default 30) |
+| **Behavior** | Prefer CA ARI windows when available; expiry fallback otherwise |
+| **Verify** | `cargo test ari` (unit + mock directory) |
+| **Phase note** | [phases/P10_08_acme_ari.md](phases/P10_08_acme_ari.md) |
 
 ### P10.9 – E7 Seccomp-BPF profiles
 
@@ -177,7 +179,7 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 | 5 | E6 Admin-selftest | **done** |
 | 6 | E3 Upstream-IP-Pin | **done** |
 | 7 | E1 optional mTLS Upstream | **done** |
-| 8 | E2 ACME ARI | pending |
+| 8 | E2 ACME ARI | **done** |
 | 9 | E7 Seccomp-BPF | pending |
 | 10 | systemd Memory/cgroup Limits | pending |
 

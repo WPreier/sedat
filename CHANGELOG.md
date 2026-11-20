@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] – 2026-11-20
+
+### Added
+
+- **P10.8 / E2 ACME ARI:** prefer RFC 9773 `renewalInfo` suggested windows when
+  the CA directory exposes them (`acme.ari = true` by default); otherwise renew
+  at `notAfter − acme.renew_days_before` (default 30). Renewal loop no longer
+  re-issues every 24h blindly.
+- Phase note [docs/phases/P10_08_acme_ari.md](docs/phases/P10_08_acme_ari.md).
+
 ## [0.1.7] – 2026-11-20
 
 ### Added

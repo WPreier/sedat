@@ -38,6 +38,8 @@ email = "admin@example.com"
 domains = ["example.com"]
 dns_provider = "file"   # file | cloudflare
 dns_file = "./state/acme-dns-challenge.txt"
+ari = true                 # prefer RFC 9773 renewalInfo when CA supports it
+renew_days_before = 30     # fallback lead time if ARI unavailable (1..=90)
 
 [[routes.hosts]]
 host = "localhost"
@@ -106,6 +108,7 @@ Additional P09 / P10 rules:
 - `upstream_allowlist` entries must be valid IPs/CIDRs when set.
 - `upstream` may be `http://` or `https://`. `upstream_mtls_*` requires `https://`;
   cert+key must both be set or both empty; PEM paths must exist when set.
+- When `acme.enabled`, `acme.renew_days_before` must be `1..=90`.
 
 ## Schema version & migration (fail-closed)
 

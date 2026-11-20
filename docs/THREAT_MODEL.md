@@ -52,6 +52,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 | T14 | Admin socket abuse after ACL bypass | Optional `AUTH` token (constant-time); failed auth audited | `src/admin` |
 | T15 | Upstream DNS rebinding / unexpected peer | Optional `upstream_allowlist` pin; fail-closed connect | `tests/upstream_pin.rs` |
 | T16 | Spoofed / unauthenticated upstream | Optional HTTPS + mTLS (`upstream_mtls_*`, default off) | `tests/upstream_mtls.rs` |
+| T17 | Mass ACME renewal stampedes | Prefer ARI windows; expiry fallback (`renew_days_before`) | `tests/acme_ari.rs` |
 
 ## PROXY Protocol policy (detail)
 
