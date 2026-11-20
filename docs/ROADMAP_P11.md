@@ -33,8 +33,9 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Ensure correlation id on remaining early rejection paths |
+| **Status** | **done** (v0.1.12) |
+| **Behavior** | Correlation id on handler denials **and** pre-hyper 400/431; response header + JSONL/tracing |
+| **Phase note** | [phases/P11_02_request_id_early_deny.md](phases/P11_02_request_id_early_deny.md) |
 
 ### P11.3 – PROXY-reject JSONL
 
@@ -69,7 +70,7 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 | Step | Item | Status |
 |------|------|--------|
 | 1 | Admin bans / unban | **done** (v0.1.11) |
-| 2 | Request-ID early deny | pending |
+| 2 | Request-ID early deny | **done** (v0.1.12) |
 | 3 | PROXY-reject JSONL | pending |
 | 4 | audit_dropped metrics | pending |
 | 5 | cgroup↔limits docs | pending |

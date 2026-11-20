@@ -156,6 +156,7 @@ request_id_header = "x-request-id"
 - Wire: HTTP header **after** outbound PROXY bytes (not a PROXY TLV).
 - Client may supply a valid id; invalid values are replaced.
 - Successful proxy logs include `request_id`; the same header is echoed on the response.
+- **Early denials (P11.2):** 429/403/400/431/421/404/502 (handler + pre-hyper smuggling/header-bomb) also echo the header and audit with the same id. See [phases/P11_02_request_id_early_deny.md](phases/P11_02_request_id_early_deny.md).
 
 See [phases/P10_01_request_id.md](phases/P10_01_request_id.md) and [ROADMAP_P10.md](ROADMAP_P10.md).
 

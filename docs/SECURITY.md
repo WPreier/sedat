@@ -79,7 +79,7 @@ Non-blocking `tracing` writer with bounded channel. Overflow: drop events and in
 
 Reload audit target: `sedat::audit` (trust-boundary key diffs).
 
-**Request-ID (P10.1):** by default SeDat generates or reuses a sanitized `x-request-id`, forwards it on the upstream HTTP request **after** PROXY framing, echoes it to the client, and logs `request_id`. Invalid inbound ids are replaced (request continues). Disable with `logging.request_id = false`. Correlation uses the HTTP header, not a PROXY v2 TLV.
+**Request-ID (P10.1 / P11.2):** by default SeDat generates or reuses a sanitized `x-request-id`, forwards it on the upstream HTTP request **after** PROXY framing, echoes it to the client (including early denials such as pre-hyper 400/431), and logs `request_id`. Invalid inbound ids are replaced (request continues). Disable with `logging.request_id = false`. Correlation uses the HTTP header, not a PROXY v2 TLV.
 
 **JSONL audit (P10.2 / E5):** optional `logging.audit_jsonl` append-only file (default **off**). Records `config_reload` diffs and `proxy_deny` events; denials include `request_id` when available. Never blocks the request path (drop on lock contention).
 

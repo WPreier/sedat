@@ -102,8 +102,26 @@ async fn rate_limit_writes_audit_with_request_id() {
     // First request consumes the burst token (may 502 to dead upstream or 200).
     let _ = hit(addr, "first-ok").await;
     // Second should 429 and audit.
-    let st = hit(addr, "denied-42").await;
-    assert_eq!(st, StatusCode::TOO_MANY_REQUESTS);
+    let stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let io = TokioIo::new(stream);
+    let (mut sender, conn) = hyper::client::conn::http1::handshake(io).await.unwrap();
+    tokio::spawn(async move {
+        let _ = conn.await;
+    });
+    let req = Request::builder()
+        .uri("/")
+        .header("host", "localhost")
+        .header("x-request-id", "denied-42")
+        .body(Full::new(Bytes::new()))
+        .unwrap();
+    let resp = sender.send_request(req).await.unwrap();
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    let echoed = resp
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    assert_eq!(echoed, "denied-42", "429 must echo request_id");
 
     let text = std::fs::read_to_string(&audit_path).unwrap();
     assert!(
@@ -116,6 +134,53 @@ async fn rate_limit_writes_audit_with_request_id() {
     );
     assert!(
         text.contains("\"request_id\":\"denied-42\""),
+        "audit missing request_id: {text}"
+    );
+}
+
+#[tokio::test]
+async fn early_smuggling_writes_audit_with_request_id() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let dir = tempfile::tempdir().unwrap();
+    let audit_path = dir.path().join("audit.jsonl");
+    let audit_str = audit_path.to_str().unwrap();
+
+    let mut cfg = test_config("http://127.0.0.1:9", audit_str);
+    cfg.limits.rate_limit_per_ip = 10_000;
+    cfg.limits.rate_limit_burst = 10_000;
+    let audit = AuditSink::open(audit_str, 0).unwrap();
+    let state = ProxyState::with_audit(cfg, audit);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = sedat::proxy::serve_http(listener, state).await;
+    });
+    tokio::time::sleep(Duration::from_millis(40)).await;
+
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let req = b"POST / HTTP/1.1\r\nHost: localhost\r\nX-Request-Id: early-audit-9\r\nTransfer-Encoding: chunked\r\nContent-Length: 4\r\n\r\n0\r\n\r\n";
+    stream.write_all(req).await.unwrap();
+    let mut buf = vec![0u8; 1024];
+    let n = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .expect("timeout")
+        .unwrap();
+    let resp = String::from_utf8_lossy(&buf[..n]);
+    assert!(resp.contains("400"), "got {resp}");
+    assert!(
+        resp.to_ascii_lowercase()
+            .contains("x-request-id: early-audit-9"),
+        "got {resp}"
+    );
+
+    let text = std::fs::read_to_string(&audit_path).unwrap();
+    assert!(
+        text.contains("\"reason\":\"smuggling\""),
+        "audit missing smuggling: {text}"
+    );
+    assert!(
+        text.contains("\"request_id\":\"early-audit-9\""),
         "audit missing request_id: {text}"
     );
 }
