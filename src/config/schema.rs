@@ -282,6 +282,14 @@ pub struct LimitsConfig {
     /// Burst tokens per IP.
     #[serde(default = "default_burst")]
     pub rate_limit_burst: u32,
+    /// After this many **consecutive** rate-limit denials, temporarily ban the IP.
+    /// `0` disables temporary bans (default **20**).
+    #[serde(default = "default_ban_strikes")]
+    pub ban_after_rate_limit_strikes: u32,
+    /// Ban TTL in seconds once triggered (fail-closed until expiry). Default **60**.
+    /// Ignored when `ban_after_rate_limit_strikes = 0`.
+    #[serde(default = "default_ban_duration")]
+    pub ban_duration_secs: u64,
     /// Separate max concurrent HTTP/3 connections (when enabled).
     #[serde(default = "default_h3_conn")]
     pub max_h3_connections: usize,
@@ -314,6 +322,12 @@ fn default_rate() -> u32 {
 fn default_burst() -> u32 {
     20
 }
+fn default_ban_strikes() -> u32 {
+    20
+}
+fn default_ban_duration() -> u64 {
+    60
+}
 fn default_h3_conn() -> usize {
     512
 }
@@ -332,6 +346,8 @@ impl Default for LimitsConfig {
             idle_timeout_secs: default_idle(),
             rate_limit_per_ip: default_rate(),
             rate_limit_burst: default_burst(),
+            ban_after_rate_limit_strikes: default_ban_strikes(),
+            ban_duration_secs: default_ban_duration(),
             max_h3_connections: default_h3_conn(),
             max_h3_streams: default_h3_streams(),
         }

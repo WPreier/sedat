@@ -178,6 +178,18 @@ pub fn security_diff(old: &SedatConfig, new: &SedatConfig) -> Vec<SecurityChange
         &old.limits.rate_limit_per_ip.to_string(),
         &new.limits.rate_limit_per_ip.to_string(),
     );
+    push(
+        &mut out,
+        "limits.ban_after_rate_limit_strikes",
+        &old.limits.ban_after_rate_limit_strikes.to_string(),
+        &new.limits.ban_after_rate_limit_strikes.to_string(),
+    );
+    push(
+        &mut out,
+        "limits.ban_duration_secs",
+        &old.limits.ban_duration_secs.to_string(),
+        &new.limits.ban_duration_secs.to_string(),
+    );
 
     push(
         &mut out,

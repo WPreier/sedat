@@ -21,7 +21,8 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 
 - Request-ID across PROXY — **done** (`logging.request_id`, HTTP `x-request-id` after framing)
 - JSONL audit sink (E5) — **done** (`logging.audit_jsonl`)
-- Temporary IP bans, admin tokens (E4), selftest (E6), upstream IP pin (E3), optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
+- Temporary IP bans after rate-limit series — **done** (`ban_after_rate_limit_strikes`)
+- Admin tokens (E4), selftest (E6), upstream IP pin (E3), optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
 
 ## Open / later (see also ROADMAP_P09 extras / P10)
 

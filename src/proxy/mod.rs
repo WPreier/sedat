@@ -35,7 +35,7 @@ use tracing::{info, warn};
 use crate::audit::AuditSink;
 use crate::config::SedatConfig;
 use crate::embed;
-use crate::limits::{ConnectionGuard, Limiter};
+use crate::limits::{BanLifecycle, ConnectionGuard, Limiter, RateOutcome};
 use crate::DEFAULT_404_HTML;
 
 /// Shared runtime state for the proxy.
@@ -207,18 +207,65 @@ pub async fn handle_request(
     let rid_ref = rid.as_deref();
     let path = req.uri().path().to_string();
 
-    if !state.limiter.check_rate(peer.ip()) {
-        return Ok(deny_response(
-            &state,
-            &cfg,
-            peer,
-            rid_ref,
-            "rate_limit",
-            StatusCode::TOO_MANY_REQUESTS,
-            "<h1>429 Too Many Requests</h1>",
-            None,
-            Some(&path),
-        ));
+    let rate = state.limiter.check_rate(peer.ip(), &cfg.limits);
+    if let Some(ref life) = rate.lifecycle {
+        match life {
+            BanLifecycle::Applied {
+                duration_secs,
+                strikes,
+            } => {
+                warn!(
+                    request_id = rid_ref.unwrap_or("-"),
+                    %peer,
+                    duration_secs,
+                    strikes,
+                    "temporary IP ban applied"
+                );
+                state.audit.emit_ip_ban(
+                    &peer.to_string(),
+                    rid_ref,
+                    *duration_secs,
+                    *strikes,
+                );
+            }
+            BanLifecycle::Expired => {
+                info!(
+                    request_id = rid_ref.unwrap_or("-"),
+                    %peer,
+                    "temporary IP ban expired"
+                );
+                state.audit.emit_ip_unban(&peer.to_string(), rid_ref);
+            }
+        }
+    }
+    match rate.outcome {
+        RateOutcome::Allow => {}
+        RateOutcome::RateLimited => {
+            return Ok(deny_response(
+                &state,
+                &cfg,
+                peer,
+                rid_ref,
+                "rate_limit",
+                StatusCode::TOO_MANY_REQUESTS,
+                "<h1>429 Too Many Requests</h1>",
+                None,
+                Some(&path),
+            ));
+        }
+        RateOutcome::Banned => {
+            return Ok(deny_response(
+                &state,
+                &cfg,
+                peer,
+                rid_ref,
+                "ip_banned",
+                StatusCode::FORBIDDEN,
+                "<h1>403 Forbidden</h1><p>Temporarily banned</p>",
+                None,
+                Some(&path),
+            ));
+        }
     }
 
     if has_smuggling_headers(&req) {

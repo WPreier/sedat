@@ -43,6 +43,7 @@ fn test_config(upstream: &str, audit_path: &str) -> SedatConfig {
             let mut l = sedat::config::LimitsConfig::default();
             l.rate_limit_per_ip = 1;
             l.rate_limit_burst = 1;
+            l.ban_after_rate_limit_strikes = 0; // isolate rate_limit audit path
             l
         },
         embedded_docs: Default::default(),

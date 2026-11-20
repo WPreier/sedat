@@ -19,7 +19,7 @@ Full write-up: **[THREAT_MODEL.md](THREAT_MODEL.md)** (assets, trust boundaries,
 | Request smuggling | Reject CL+TE; strict header parsing; reject absolute-URI tricks; size caps |
 | Slowloris / header bomb | Request timeout on connections; header count/size caps |
 | HTTP/2 CONTINUATION / HPACK bomb | hyper limits + size caps; negative corpus `tests/h2_attack_corpus.rs` |
-| Edge DoS | Token-bucket per verified client IP; connection limits |
+| Edge DoS | Token-bucket per verified client IP; connection limits; temporary IP ban after strike series |
 | Privilege / RCE blast radius | Drop after bind; **Landlock + NO_NEW_PRIVS** (`[hardening]`, Linux `auto`) |
 | Log blocking | Async bounded channel; drop+metric on overflow |
 | Cert loss on renew fail | Hot-swap; keep previous cert on ACME failure |
@@ -57,6 +57,7 @@ Applied **after** privilege drop. Unsupported kernels: `auto` skips; `required` 
 ## Rate limits & hygiene
 
 - Token bucket per client IP (after TLS / inbound PROXY rewrite, before expensive proxy work).
+- **Temporary IP ban (P10.3):** after `ban_after_rate_limit_strikes` consecutive denials (default 20), ban for `ban_duration_secs` (default 60) → **403** until expiry. Set strikes to `0` to disable. Ban/unban logged + optional JSONL.
 - Caps: connections, request line, header count/size, body size.
 - Unknown Host: reject (default).
 
@@ -92,7 +93,7 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 
 - [x] Request-ID across PROXY (`x-request-id` HTTP header after framing)
 - [x] JSONL audit sink (E5)
-- [ ] Temporary IP bans after rate-limit series
+- [x] Temporary IP bans after rate-limit series
 - [ ] Admin tokens / selftest / upstream pin / optional mTLS / ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
 
 ## Reporting

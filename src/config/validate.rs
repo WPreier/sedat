@@ -283,6 +283,12 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
     if cfg.limits.max_connections == 0 {
         return Err(err(1, "limits.max_connections must be > 0"));
     }
+    if cfg.limits.ban_after_rate_limit_strikes > 0 && cfg.limits.ban_duration_secs == 0 {
+        return Err(err(
+            find_line(source, "ban_duration_secs"),
+            "limits.ban_duration_secs must be > 0 when ban_after_rate_limit_strikes > 0",
+        ));
+    }
     if cfg.experimental.h3 && !cfg!(feature = "http3") {
         // Allow config parse; runtime will warn and refuse to enable.
     }

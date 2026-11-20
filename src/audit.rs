@@ -177,6 +177,32 @@ impl AuditSink {
             "version": version,
         }));
     }
+
+    /// Temporary IP ban applied after consecutive rate-limit strikes.
+    pub fn emit_ip_ban(
+        &self,
+        peer: &str,
+        request_id: Option<&str>,
+        duration_secs: u64,
+        strikes: u32,
+    ) {
+        self.emit(json!({
+            "event": "ip_ban",
+            "peer": peer,
+            "request_id": request_id,
+            "duration_secs": duration_secs,
+            "strikes": strikes,
+        }));
+    }
+
+    /// Temporary IP ban expired (cleared on next request after TTL).
+    pub fn emit_ip_unban(&self, peer: &str, request_id: Option<&str>) {
+        self.emit(json!({
+            "event": "ip_unban",
+            "peer": peer,
+            "request_id": request_id,
+        }));
+    }
 }
 
 fn rfc3339_now() -> String {

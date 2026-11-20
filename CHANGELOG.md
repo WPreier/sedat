@@ -5,6 +5,17 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] – 2026-11-20
+
+### Added
+
+- **P10.3 Temporary IP bans:** after consecutive rate-limit denials
+  (`limits.ban_after_rate_limit_strikes`, default 20; `0` disables), ban the
+  client IP for `ban_duration_secs` (default 60) with **403** fail-closed
+  responses; log ban/unban via tracing and JSONL (`ip_ban` / `ip_unban`) with
+  `request_id` when available.
+- Phase note [docs/phases/P10_03_ip_bans.md](docs/phases/P10_03_ip_bans.md).
+
 ## [0.1.2] – 2026-11-20
 
 ### Added

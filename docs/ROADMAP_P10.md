@@ -78,11 +78,12 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending |
+| **Status** | **done** |
 | **Depends on** | Rate limiter; P10.1/P10.2 for correlation |
-| **Config** | Ban threshold / TTL under `[limits]` (TBD) |
-| **Behavior** | After N consecutive 429s (or empty-bucket series), temporary ban; log with request_id / client IP |
-| **Verify** | Integration: burst → 429 → ban window; logs include reason |
+| **Config** | `[limits] ban_after_rate_limit_strikes = 20` (0=off), `ban_duration_secs = 60` |
+| **Behavior** | After N consecutive rate-limit denials → temporary ban (`403` fail-closed); `tracing` + JSONL `ip_ban`/`ip_unban` with `request_id` |
+| **Verify** | `cargo test ip_ban` / `--lib limits` |
+| **Phase note** | [phases/P10_03_ip_bans.md](phases/P10_03_ip_bans.md) |
 
 ### P10.4 – E4 Admin-Tokens
 
@@ -167,7 +168,7 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 |------|------|--------|
 | 1 | Request-ID über PROXY | **done** |
 | 2 | E5 JSONL-Audit-Log | **done** |
-| 3 | Temporäre IP-Bans + Logging | pending |
+| 3 | Temporäre IP-Bans + Logging | **done** |
 | 4 | E4 Admin-Tokens | pending |
 | 5 | E6 Admin-selftest | pending |
 | 6 | E3 Upstream-IP-Pin | pending |

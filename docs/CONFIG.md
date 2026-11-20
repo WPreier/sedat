@@ -58,6 +58,8 @@ request_timeout_secs = 30
 idle_timeout_secs = 60
 rate_limit_per_ip = 100
 rate_limit_burst = 20
+ban_after_rate_limit_strikes = 20   # 0 = disable temporary bans
+ban_duration_secs = 60
 
 [embedded_docs]
 enabled = true
@@ -91,6 +93,7 @@ Additional P09 / P10 rules:
 - Inbound PROXY still requires a non-empty allowlist when enabled.
 - `logging.request_id_header` must be a valid HTTP token (alphanumeric / `-`).
 - `logging.audit_jsonl` must be empty or a local file path (no URL schemes).
+- `ban_duration_secs` must be `> 0` when `ban_after_rate_limit_strikes > 0`.
 
 ## Schema version & migration (fail-closed)
 

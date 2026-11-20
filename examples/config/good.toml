@@ -43,6 +43,8 @@ request_timeout_secs = 30
 idle_timeout_secs = 60
 rate_limit_per_ip = 100
 rate_limit_burst = 20
+ban_after_rate_limit_strikes = 20
+ban_duration_secs = 60
 
 [embedded_docs]
 enabled = true

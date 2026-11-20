@@ -48,6 +48,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 | T10 | Privilege persistence / RCE blast | Drop after bind; Landlock + NO_NEW_PRIVS | `src/hardening` |
 | T11 | HTTP/2 CONTINUATION / HPACK bomb | Caps + hyper; negative corpus | `tests/h2_attack_corpus.rs` |
 | T12 | Plaintext PROXY when PP2-over-TLS expected | `inbound_placement=after_tls` rejects plaintext PROXY | `tests/attack_hygiene.rs` |
+| T13 | Sustained per-IP flood after burst | Temporary IP ban after consecutive rate-limit strikes (`403` until TTL) | `tests/ip_ban.rs`, `src/limits` |
 
 ## PROXY Protocol policy (detail)
 
@@ -74,5 +75,6 @@ See [CONFIG.md](CONFIG.md) and `sedat --migrate-config`. Unknown `schema_version
 ## Residual risks / non-goals
 
 - Full seccomp BPF syscall allowlists: proposed (ROADMAP_P09 E7); today NO_NEW_PRIVS + Landlock.
-- mTLS to upstream, config signing, admin tokens: proposed extras in ROADMAP_P09.
-- HTTP/3 amplification corpus: proposed (E8).
+- mTLS to upstream, config signing, admin tokens: see [ROADMAP_P10.md](ROADMAP_P10.md).
+- HTTP/3 amplification corpus: deferred (E8).
+- Temporary bans are per-process (not shared across SeDat replicas); behind a shared LB, prefer LB-level bans for multi-instance.

@@ -137,8 +137,22 @@ audit_jsonl_max_bytes = 10485760
 ```
 
 Events (one JSON object per line): `startup`, `config_reload` (security-diff), `proxy_deny`
-(with `request_id` when available). Contended writes are dropped (non-blocking).
-See [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md).
+(with `request_id` when available), `ip_ban` / `ip_unban`. Contended writes are dropped
+(non-blocking). See [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md).
+
+## Temporary IP bans
+
+After consecutive rate-limit denials, SeDat can temporarily ban the client IP:
+
+```toml
+[limits]
+ban_after_rate_limit_strikes = 20  # 0 disables
+ban_duration_secs = 60
+```
+
+- While banned: **403** (fail-closed) until TTL expires.
+- Logging: `tracing` warn/info + JSONL `ip_ban` / `ip_unban` (with `request_id` when available).
+- See [phases/P10_03_ip_bans.md](phases/P10_03_ip_bans.md).
 
 ## Firewall
 
