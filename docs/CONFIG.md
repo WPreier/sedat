@@ -59,7 +59,7 @@ inbound_allowlist = []   # CIDRs, only if inbound_enabled
 inbound_placement = "before_tls"  # before_tls | after_tls (PP2 over TLS)
 
 [limits]
-max_connections = 1024
+max_connections = 1024   # align with systemd MemoryMax / LimitNOFILE (P11.5)
 max_header_bytes = 16384
 max_headers = 100
 max_body_bytes = 1048576
@@ -93,8 +93,13 @@ audit_jsonl_max_bytes = 10485760  # rotate to *.jsonl.1; 0 = never
 ## Deploy resource caps (not TOML)
 
 Process memory/PID/FD ceilings live in the systemd unit / Compose, not in
-`sedat.toml`. Defaults: see [OPERATIONS.md](OPERATIONS.md) and
-[phases/P10_10_systemd_memory.md](phases/P10_10_systemd_memory.md).
+`sedat.toml`. Defaults: `MemoryMax=512M`, `LimitNOFILE=65535`, `TasksMax=4096`
+— sized for default `limits.max_connections = 1024`.
+
+Sizing formulas (`LimitNOFILE ≥ 2×C+256`, memory rule of thumb):
+[OPERATIONS.md](OPERATIONS.md) and
+[phases/P11_05_limits_cgroup_sizing.md](phases/P11_05_limits_cgroup_sizing.md).
+Unit keys: [phases/P10_10_systemd_memory.md](phases/P10_10_systemd_memory.md).
 
 ## Validation
 

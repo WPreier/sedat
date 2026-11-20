@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] – 2026-11-21
+
+### Added
+
+- **P11.5 limits ↔ cgroup sizing docs:** practical formulas linking
+  `limits.max_connections` to `MemoryMax` / `LimitNOFILE` / `TasksMax` in
+  OPERATIONS + CONFIG; unit comments and a defaults coherence test. Phase note
+  [docs/phases/P11_05_limits_cgroup_sizing.md](docs/phases/P11_05_limits_cgroup_sizing.md).
+
 ## [0.1.14] – 2026-11-21
 
 ### Added

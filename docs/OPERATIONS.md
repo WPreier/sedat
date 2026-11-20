@@ -48,6 +48,9 @@ Unit file: [`deploy/sedat.service`](../deploy/sedat.service).
 - **cgroup limits (P10.10):** `MemoryHigh=384M`, `MemoryMax=512M`, `TasksMax=4096`,
   `LimitNOFILE=65535`, `CPUQuota=200%` — tune for the host; see
   [phases/P10_10_systemd_memory.md](phases/P10_10_systemd_memory.md).
+- **Sizing vs TOML (P11.5):** keep `limits.max_connections` aligned with those
+  caps — formulas below and
+  [phases/P11_05_limits_cgroup_sizing.md](phases/P11_05_limits_cgroup_sizing.md).
 
 ```bash
 sudo cp deploy/sedat.service /etc/systemd/system/
@@ -56,6 +59,29 @@ systemd-analyze verify /etc/systemd/system/sedat.service
 sudo systemctl enable --now sedat
 systemctl show sedat -p MemoryMax -p MemoryHigh -p TasksMax
 ```
+
+## Sizing: `max_connections` ↔ MemoryMax / LimitNOFILE
+
+In-process limiter (`[limits] max_connections`, default **1024**) rejects new
+accepts when full. Outer cgroups/ulimits must still fit that concurrency or the
+process hits FD/OOM failures *before* the limiter helps.
+
+Let `C = limits.max_connections`.
+
+| Resource | Rule of thumb | Default check (`C=1024`) |
+|----------|---------------|---------------------------|
+| **FDs** | `LimitNOFILE ≥ 2×C + 256` | `2304` ≪ `65535` |
+| **RAM** | `MemoryMax_MiB ≥ 64…128 + (C × 250…400 KiB)/1024` | ≈ `478 MiB` → shipped `512M` |
+| **Soft RAM** | `MemoryHigh ≈ 0.75 × MemoryMax` | `384M` / `512M` |
+| **Tasks** | `TasksMax ≥ C + 64` | `4096` ≥ `1088` |
+
+When raising `C`, update **both** `sedat.toml` and `deploy/sedat.service` /
+Compose `mem_limit` + `pids_limit` in the same change. Re-measure RSS under
+load; the KiB/connection band is a starting point for TLS reverse-proxy work,
+not a hard SLA.
+
+Cross-links: [CONFIG.md](CONFIG.md) (`[limits]` + deploy caps),
+[phases/P11_05_limits_cgroup_sizing.md](phases/P11_05_limits_cgroup_sizing.md).
 
 ## Docker hardening
 

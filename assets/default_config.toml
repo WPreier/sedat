@@ -38,6 +38,7 @@ inbound_allowlist = []
 inbound_placement = "before_tls"  # or "after_tls" for PP2 over TLS
 
 [limits]
+# Keep in sync with deploy/sedat.service MemoryMax / LimitNOFILE (docs P11.5).
 max_connections = 1024
 max_header_bytes = 16384
 max_headers = 100
