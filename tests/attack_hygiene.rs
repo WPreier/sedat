@@ -117,7 +117,7 @@ async fn smuggling_cl_te_rejected() {
 
     let mut stream = TcpStream::connect(addr).await.unwrap();
     // Intentionally conflicting framing — SeDat must reject before upstream.
-    let req = b"POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nContent-Length: 4\r\n\r\n0\r\n\r\n";
+    let req = b"POST / HTTP/1.1\r\nHost: localhost\r\nX-Request-Id: smug-early-1\r\nTransfer-Encoding: chunked\r\nContent-Length: 4\r\n\r\n0\r\n\r\n";
     stream.write_all(req).await.unwrap();
     let mut buf = vec![0u8; 1024];
     let n = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf))
@@ -130,6 +130,42 @@ async fn smuggling_cl_te_rejected() {
         "expected 400 for CL+TE smuggling shape, got {resp}"
     );
     assert!(!resp.contains("200 OK"));
+    assert!(
+        resp.to_ascii_lowercase().contains("x-request-id: smug-early-1"),
+        "early smuggling reject must echo request_id, got {resp}"
+    );
+}
+
+#[tokio::test]
+async fn header_bomb_echoes_request_id() {
+    let upstream = spawn_upstream().await;
+    let mut limits = sedat::config::LimitsConfig::default();
+    limits.max_header_bytes = 512;
+    limits.max_headers = 20;
+    let addr = spawn_proxy(test_config(&upstream, limits)).await;
+
+    let mut stream = TcpStream::connect(addr).await.unwrap();
+    // Oversized headers without terminator within the read cap → pre-hyper 431.
+    let mut req = String::from("GET / HTTP/1.1\r\nHost: localhost\r\nX-Request-Id: bomb-rid-7\r\n");
+    while req.len() < 800 {
+        req.push_str(&format!("X-Flood: {}\r\n", "A".repeat(64)));
+    }
+    // Intentionally no final \r\n\r\n — forces incomplete header block at max_header_bytes.
+    stream.write_all(req.as_bytes()).await.unwrap();
+    let mut buf = vec![0u8; 2048];
+    let n = tokio::time::timeout(Duration::from_secs(2), stream.read(&mut buf))
+        .await
+        .expect("timeout")
+        .unwrap();
+    let resp = String::from_utf8_lossy(&buf[..n]);
+    assert!(
+        resp.contains("431"),
+        "expected 431 for incomplete/oversized headers, got {resp}"
+    );
+    assert!(
+        resp.to_ascii_lowercase().contains("x-request-id:"),
+        "431 must include request_id header, got {resp}"
+    );
 }
 
 #[tokio::test]

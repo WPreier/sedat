@@ -44,6 +44,47 @@ pub fn resolve_request_id(headers: &HeaderMap, enabled: bool, header_name: &str)
     Some(generate_request_id())
 }
 
+/// Resolve a request id from a raw HTTP/1 header block (pre-hyper early rejects).
+///
+/// Same rules as [`resolve_request_id`]: disabled → `None`; reuse valid inbound;
+/// otherwise generate.
+#[must_use]
+pub fn resolve_request_id_from_raw(
+    header_block: &[u8],
+    enabled: bool,
+    header_name: &str,
+) -> Option<String> {
+    if !enabled {
+        return None;
+    }
+    let text = String::from_utf8_lossy(header_block);
+    for line in text.split("\r\n").skip(1) {
+        if line.is_empty() {
+            break;
+        }
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        if name.trim().eq_ignore_ascii_case(header_name) {
+            if let Some(id) = sanitize_request_id(value) {
+                return Some(id);
+            }
+            warn!(
+                header = %header_name,
+                "invalid inbound request-id in raw headers; generating a new one"
+            );
+            break;
+        }
+    }
+    Some(generate_request_id())
+}
+
+/// Whether `buf` ends with a complete HTTP/1 header terminator (`\r\n\r\n`).
+#[must_use]
+pub fn http_headers_complete(buf: &[u8]) -> bool {
+    buf.len() >= 4 && buf[buf.len() - 4..] == *b"\r\n\r\n"
+}
+
 /// Accept only printable safe tokens (A–Z a–z 0–9 `_` `-` `.`).
 #[must_use]
 pub fn sanitize_request_id(raw: &str) -> Option<String> {
@@ -143,5 +184,20 @@ mod tests {
         assert!(!valid_header_name(""));
         assert!(!valid_header_name("bad header"));
         assert!(!valid_header_name("-leading"));
+    }
+
+    #[test]
+    fn raw_header_reuses_and_generates() {
+        let raw = b"GET / HTTP/1.1\r\nHost: x\r\nX-Request-Id: early-99\r\n\r\n";
+        let id = resolve_request_id_from_raw(raw, true, DEFAULT_REQUEST_ID_HEADER).unwrap();
+        assert_eq!(id, "early-99");
+
+        let bare = b"GET / HTTP/1.1\r\nHost: x\r\n\r\n";
+        let gen = resolve_request_id_from_raw(bare, true, DEFAULT_REQUEST_ID_HEADER).unwrap();
+        assert_eq!(gen.len(), 32);
+
+        assert!(resolve_request_id_from_raw(raw, false, DEFAULT_REQUEST_ID_HEADER).is_none());
+        assert!(http_headers_complete(raw));
+        assert!(!http_headers_complete(b"GET / HTTP/1.1\r\nHost: x\r\n"));
     }
 }

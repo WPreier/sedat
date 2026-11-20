@@ -15,8 +15,8 @@ pub use proxy_protocol::{
     probe_inbound_proxy_reader, PrefixedIo, PrefixedStream, ProxyVersion, PROXY_V2_SIG,
 };
 pub use request_id::{
-    generate_request_id, resolve_request_id, sanitize_request_id, valid_header_name,
-    DEFAULT_REQUEST_ID_HEADER, MAX_REQUEST_ID_LEN,
+    generate_request_id, http_headers_complete, resolve_request_id, resolve_request_id_from_raw,
+    sanitize_request_id, valid_header_name, DEFAULT_REQUEST_ID_HEADER, MAX_REQUEST_ID_LEN,
 };
 pub use router::{resolve_route, RouteMatch};
 pub use upstream_pin::{filter_pinned_addrs, upstream_ip_allowed};
@@ -94,6 +94,55 @@ fn attach_request_id(
         }
     }
     resp
+}
+
+/// Pre-hyper HTTP/1 early reject: response header + JSONL + tracing with request_id.
+async fn write_early_http_deny(
+    stream: &mut PrefixedStream,
+    state: &ProxyState,
+    cfg: &SedatConfig,
+    peer: SocketAddr,
+    header_block: &[u8],
+    status: StatusCode,
+    reason: &str,
+    body: &str,
+) {
+    use tokio::io::AsyncWriteExt;
+
+    let rid = resolve_request_id_from_raw(
+        header_block,
+        cfg.logging.request_id,
+        &cfg.logging.request_id_header,
+    );
+    state.audit.emit_proxy_deny(
+        reason,
+        status.as_u16(),
+        &peer.to_string(),
+        rid.as_deref(),
+        None,
+        None,
+    );
+    warn!(
+        request_id = rid.as_deref().unwrap_or("-"),
+        %peer,
+        reason,
+        status = status.as_u16(),
+        "early HTTP reject"
+    );
+
+    let reason_phrase = status.canonical_reason().unwrap_or("Error");
+    let mut resp = format!(
+        "HTTP/1.1 {} {}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n",
+        status.as_u16(),
+        reason_phrase,
+        body.len()
+    );
+    if let Some(ref id) = rid {
+        resp.push_str(&format!("{}: {id}\r\n", cfg.logging.request_id_header));
+    }
+    resp.push_str("\r\n");
+    resp.push_str(body);
+    let _ = stream.write_all(resp.as_bytes()).await;
 }
 
 fn deny_response(
@@ -511,6 +560,7 @@ pub async fn serve_http(listener: TcpListener, state: ProxyState) -> std::io::Re
             let (mut stream, client) = accepted;
             let idle = state.limiter.request_timeout();
             let max_hdr = state.limiter.max_header_bytes();
+            let cfg_early = state.config.load_full();
             // Pre-hyper raw scan: hyper may drop CL or TE before our handler sees both.
             let header_block = match read_http_header_block(&mut stream, max_hdr).await {
                 Ok(b) => b,
@@ -519,14 +569,32 @@ pub async fn serve_http(listener: TcpListener, state: ProxyState) -> std::io::Re
                     return;
                 }
             };
+            if !http_headers_complete(&header_block) {
+                write_early_http_deny(
+                    &mut stream,
+                    &state,
+                    &cfg_early,
+                    peer,
+                    &header_block,
+                    StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE,
+                    "header_bomb",
+                    "Request Header Fields Too Large",
+                )
+                .await;
+                return;
+            }
             if raw_http_headers_smuggling(&header_block) {
-                use tokio::io::AsyncWriteExt;
-                let _ = stream
-                    .write_all(
-                        b"HTTP/1.1 400 Bad Request\r\nContent-Length: 47\r\nConnection: close\r\n\r\nTransfer-Encoding and Content-Length conflict",
-                    )
-                    .await;
-                warn!(%peer, "rejected request smuggling shape (CL+TE)");
+                write_early_http_deny(
+                    &mut stream,
+                    &state,
+                    &cfg_early,
+                    peer,
+                    &header_block,
+                    StatusCode::BAD_REQUEST,
+                    "smuggling",
+                    "Transfer-Encoding and Content-Length conflict",
+                )
+                .await;
                 return;
             }
             let (inner, unread) = stream.into_parts();

@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] – 2026-11-20
+
+### Added
+
+- **P11.2 Request-ID on early denials:** pre-hyper smuggling (400) and
+  incomplete/oversized header blocks (431) now echo `x-request-id` (when
+  enabled) and emit JSONL `proxy_deny` with the same id; handler denials
+  already covered via `deny_response`. Phase note
+  [docs/phases/P11_02_request_id_early_deny.md](docs/phases/P11_02_request_id_early_deny.md).
+
 ## [0.1.11] – 2026-11-20
 
 ### Added

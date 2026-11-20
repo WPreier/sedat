@@ -55,7 +55,7 @@ Durable list of follow-ups after **P10 complete**. Promoted work lives in
 | Item | Notes | Suggested |
 |------|-------|-----------|
 | Upstream pin: Hostname-Literal + periodisches Re-Resolve | Pin by name + refresh DNS on interval | later |
-| Request-ID on all early deny paths | Close any remaining gaps before handler | audit P11 |
+| Request-ID on all early deny paths | Close remaining gaps (pre-hyper 400/431) | **done P11.2** |
 | Hot-reload without process restart | Routes/certs partially done; broaden | partial |
 
 ### Won't do (prod)
