@@ -137,9 +137,18 @@ pub async fn serve_https(
             )
             .await
             {
-                Ok(Some(v)) => v,
-                Ok(None) => {
-                    warn!(%peer, "rejected inbound PROXY on HTTPS (untrusted/disabled/after_tls plaintext)");
+                Ok(Ok(v)) => v,
+                Ok(Err(reason)) => {
+                    warn!(
+                        %peer,
+                        reason = reason.as_str(),
+                        "rejected inbound PROXY on HTTPS (plaintext stage)"
+                    );
+                    state.audit.emit_proxy_reject(
+                        &peer.to_string(),
+                        reason.as_str(),
+                        "plaintext",
+                    );
                     return;
                 }
                 Err(e) => {
@@ -167,9 +176,18 @@ pub async fn serve_https(
             )
             .await
             {
-                Ok(Some(v)) => v,
-                Ok(None) => {
-                    warn!(%peer, "rejected inbound PROXY after TLS (untrusted or malformed)");
+                Ok(Ok(v)) => v,
+                Ok(Err(reason)) => {
+                    warn!(
+                        %peer,
+                        reason = reason.as_str(),
+                        "rejected inbound PROXY after TLS"
+                    );
+                    state.audit.emit_proxy_reject(
+                        &peer.to_string(),
+                        reason.as_str(),
+                        "after_tls",
+                    );
                     return;
                 }
                 Err(e) => {

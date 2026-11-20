@@ -99,6 +99,29 @@ pub fn encode_proxy_v2(client: SocketAddr, server: SocketAddr) -> Vec<u8> {
     buf
 }
 
+/// Why an inbound PROXY frame was rejected (pre-HTTP; for JSONL audit).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProxyRejectReason {
+    /// Framing seen but inbound disabled and/or TCP peer not on allowlist.
+    UntrustedOrDisabled,
+    /// Plaintext PROXY while `inbound_placement = "after_tls"`.
+    PlaintextWhenAfterTls,
+    /// Framing present but truncated or unparsable.
+    Malformed,
+}
+
+impl ProxyRejectReason {
+    /// Stable audit / metrics reason string.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::UntrustedOrDisabled => "untrusted_or_disabled",
+            Self::PlaintextWhenAfterTls => "plaintext_when_after_tls",
+            Self::Malformed => "malformed",
+        }
+    }
+}
+
 /// Result of probing the start of a TCP stream for an inbound PROXY header.
 #[derive(Debug)]
 pub enum InboundProbe {
@@ -115,7 +138,7 @@ pub enum InboundProbe {
         leftover: Vec<u8>,
     },
     /// PROXY framing from an untrusted peer (injection) or malformed header.
-    Rejected,
+    Rejected(ProxyRejectReason),
 }
 
 fn looks_like_proxy_v1(buf: &[u8]) -> bool {
@@ -211,17 +234,17 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
 
     if looks_like_proxy_v1(&buf) {
         if !inbound_proxy_trusted(peer.ip(), enabled, allowlist) {
-            return Ok(InboundProbe::Rejected);
+            return Ok(InboundProbe::Rejected(ProxyRejectReason::UntrustedOrDisabled));
         }
         while !buf.windows(2).any(|w| w == b"\r\n") {
             let mut b = [0u8; 1];
             let k = stream.read(&mut b).await?;
             if k == 0 {
-                return Ok(InboundProbe::Rejected);
+                return Ok(InboundProbe::Rejected(ProxyRejectReason::Malformed));
             }
             buf.push(b[0]);
             if buf.len() > 108 {
-                return Ok(InboundProbe::Rejected);
+                return Ok(InboundProbe::Rejected(ProxyRejectReason::Malformed));
             }
         }
         return match parse_proxy_v1(&buf) {
@@ -229,7 +252,7 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
                 client,
                 leftover: buf[consumed..].to_vec(),
             }),
-            None => Ok(InboundProbe::Rejected),
+            None => Ok(InboundProbe::Rejected(ProxyRejectReason::Malformed)),
         };
     }
 
@@ -240,9 +263,11 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
             if k == 0 {
                 if buf.starts_with(&PROXY_V2_SIG[..buf.len()]) && buf.len() >= 4 {
                     if !inbound_proxy_trusted(peer.ip(), enabled, allowlist) {
-                        return Ok(InboundProbe::Rejected);
+                        return Ok(InboundProbe::Rejected(
+                            ProxyRejectReason::UntrustedOrDisabled,
+                        ));
                     }
-                    return Ok(InboundProbe::Rejected);
+                    return Ok(InboundProbe::Rejected(ProxyRejectReason::Malformed));
                 }
                 return Ok(InboundProbe::Absent { leftover: buf });
             }
@@ -252,18 +277,18 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
             return Ok(InboundProbe::Absent { leftover: buf });
         }
         if !inbound_proxy_trusted(peer.ip(), enabled, allowlist) {
-            return Ok(InboundProbe::Rejected);
+            return Ok(InboundProbe::Rejected(ProxyRejectReason::UntrustedOrDisabled));
         }
         let len = u16::from_be_bytes([buf[14], buf[15]]) as usize;
         while buf.len() < 16 + len {
             let mut b = [0u8; 1];
             let k = stream.read(&mut b).await?;
             if k == 0 {
-                return Ok(InboundProbe::Rejected);
+                return Ok(InboundProbe::Rejected(ProxyRejectReason::Malformed));
             }
             buf.push(b[0]);
             if buf.len() > 16 + 216 {
-                return Ok(InboundProbe::Rejected);
+                return Ok(InboundProbe::Rejected(ProxyRejectReason::Malformed));
             }
         }
         let ver_cmd = buf[12];
@@ -278,7 +303,7 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
                 client,
                 leftover: buf[consumed..].to_vec(),
             }),
-            None => Ok(InboundProbe::Rejected),
+            None => Ok(InboundProbe::Rejected(ProxyRejectReason::Malformed)),
         };
     }
 
@@ -376,20 +401,22 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for PrefixedIo<S> {
 }
 
 /// Accept a connection, apply inbound PROXY policy, return stream + effective client address.
+///
+/// `Ok(Err(reason))` means PROXY framing was rejected (connection should be dropped).
 pub async fn accept_with_inbound_proxy(
     mut stream: TcpStream,
     peer: SocketAddr,
     enabled: bool,
     allowlist: &[String],
-) -> io::Result<Option<(PrefixedStream, SocketAddr)>> {
+) -> io::Result<Result<(PrefixedStream, SocketAddr), ProxyRejectReason>> {
     match probe_inbound_proxy(&mut stream, peer, enabled, allowlist).await? {
         InboundProbe::Absent { leftover } => {
-            Ok(Some((PrefixedStream::new(stream, leftover), peer)))
+            Ok(Ok((PrefixedStream::new(stream, leftover), peer)))
         }
         InboundProbe::Accepted { client, leftover } => {
-            Ok(Some((PrefixedStream::new(stream, leftover), client)))
+            Ok(Ok((PrefixedStream::new(stream, leftover), client)))
         }
-        InboundProbe::Rejected => Ok(None),
+        InboundProbe::Rejected(reason) => Ok(Err(reason)),
     }
 }
 
@@ -403,31 +430,43 @@ pub async fn accept_with_inbound_proxy_placement(
     enabled: bool,
     allowlist: &[String],
     placement: &str,
-) -> io::Result<Option<(PrefixedStream, SocketAddr)>> {
+) -> io::Result<Result<(PrefixedStream, SocketAddr), ProxyRejectReason>> {
     if inbound_on_plaintext(enabled, placement) {
         return accept_with_inbound_proxy(stream, peer, enabled, allowlist).await;
     }
     // after_tls or inbound disabled: still reject plaintext PROXY injection attempts.
     // When disabled, probe with enabled=false → Rejected on PROXY framing.
     // When after_tls, probe with enabled=false so plaintext PROXY cannot spoof.
-    accept_with_inbound_proxy(stream, peer, false, allowlist).await
+    match accept_with_inbound_proxy(stream, peer, false, allowlist).await? {
+        Ok(v) => Ok(Ok(v)),
+        Err(reason) => {
+            let reason = if enabled && placement == "after_tls" {
+                ProxyRejectReason::PlaintextWhenAfterTls
+            } else {
+                reason
+            };
+            Ok(Err(reason))
+        }
+    }
 }
 
 /// Apply inbound PROXY probe to an already-decrypted stream (PP2 over TLS).
+///
+/// `Ok(Err(reason))` means post-TLS PROXY framing was rejected.
 pub async fn apply_inbound_after_tls<R: AsyncRead + Unpin>(
     stream: &mut R,
     peer: SocketAddr,
     enabled: bool,
     allowlist: &[String],
     placement: &str,
-) -> io::Result<Option<(SocketAddr, Vec<u8>)>> {
+) -> io::Result<Result<(SocketAddr, Vec<u8>), ProxyRejectReason>> {
     if !inbound_on_tls(enabled, placement) {
-        return Ok(Some((peer, Vec::new())));
+        return Ok(Ok((peer, Vec::new())));
     }
     match probe_inbound_proxy_reader(stream, peer, enabled, allowlist).await? {
-        InboundProbe::Absent { leftover } => Ok(Some((peer, leftover))),
-        InboundProbe::Accepted { client, leftover } => Ok(Some((client, leftover))),
-        InboundProbe::Rejected => Ok(None),
+        InboundProbe::Absent { leftover } => Ok(Ok((peer, leftover))),
+        InboundProbe::Accepted { client, leftover } => Ok(Ok((client, leftover))),
+        InboundProbe::Rejected(reason) => Ok(Err(reason)),
     }
 }
 

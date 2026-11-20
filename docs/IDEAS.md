@@ -37,7 +37,7 @@ Durable list of follow-ups after **P10 complete**. Promoted work lives in
 | Item | Notes | Suggested |
 |------|-------|-----------|
 | Prometheus counter for `audit_dropped` | Contended JSONL drops visible in metrics | P11 |
-| PROXY-Rejects (pre-HTTP) as JSONL event | Today often only tracing; audit for SIEM | P11 |
+| PROXY-Rejects (pre-HTTP) as JSONL event | JSONL `proxy_reject` with reason/stage | **done P11.3** |
 | Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | later |
 
 ### Admin / auth / selftest

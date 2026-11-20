@@ -43,7 +43,7 @@ Automated negative tests: `tests/attack_hygiene.rs`, `tests/h2_attack_corpus.rs`
 ## PROXY Protocol
 
 - **Outbound to Seda:** PROXY v2 recommended (v1 optional).
-- **Inbound from clients/LB:** default **disabled**. Enable only with `proxy_protocol.inbound_allowlist` CIDRs. Empty allowlist + enabled → validation error. PROXY signatures from untrusted peers are **dropped**.
+- **Inbound from clients/LB:** default **disabled**. Enable only with `proxy_protocol.inbound_allowlist` CIDRs. Empty allowlist + enabled → validation error. PROXY signatures from untrusted peers are **dropped** (JSONL `proxy_reject`, P11.3).
 - **Placement:** `inbound_placement = "before_tls"` (default) or `"after_tls"` (PP2 over TLS). With `after_tls`, plaintext PROXY framing is rejected; only post-handshake PROXY is trusted.
 - Seda / Mock-Seda must listen on localhost/private net and trust only SeDat.
 

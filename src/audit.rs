@@ -168,6 +168,19 @@ impl AuditSink {
         }));
     }
 
+    /// Inbound PROXY framing rejected before HTTP (no request_id; connection dropped).
+    ///
+    /// `stage` is `plaintext` or `after_tls`. `reason` uses [`crate::proxy::ProxyRejectReason::as_str`].
+    pub fn emit_proxy_reject(&self, peer: &str, reason: &str, stage: &str) {
+        self.emit(json!({
+            "event": "proxy_reject",
+            "request_id": Value::Null,
+            "peer": peer,
+            "reason": reason,
+            "stage": stage,
+        }));
+    }
+
     /// Process start marker.
     pub fn emit_startup(&self, version: &str) {
         self.emit(json!({
@@ -298,6 +311,20 @@ mod tests {
         s.emit_proxy_deny("rate_limit", 429, "127.0.0.1:1", Some("abc"), None, None);
         assert!(!s.enabled());
         assert_eq!(s.dropped(), 0);
+    }
+
+    #[test]
+    fn writes_proxy_reject() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a.jsonl");
+        let s = AuditSink::open(path.to_str().unwrap(), 0).unwrap();
+        s.emit_proxy_reject("127.0.0.1:9", "untrusted_or_disabled", "plaintext");
+        let text = std::fs::read_to_string(&path).unwrap();
+        let v: Value = serde_json::from_str(text.lines().next().unwrap()).unwrap();
+        assert_eq!(v["event"], "proxy_reject");
+        assert_eq!(v["reason"], "untrusted_or_disabled");
+        assert_eq!(v["stage"], "plaintext");
+        assert!(v["request_id"].is_null());
     }
 
     #[test]
