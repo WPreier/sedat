@@ -41,8 +41,9 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Audit event when inbound PROXY is rejected pre-HTTP |
+| **Status** | **done** (v0.1.13) |
+| **Behavior** | JSONL `proxy_reject` when inbound PROXY framing is rejected pre-HTTP |
+| **Phase note** | [phases/P11_03_proxy_reject_jsonl.md](phases/P11_03_proxy_reject_jsonl.md) |
 
 ### P11.4 – Prometheus `audit_dropped`
 
@@ -71,7 +72,7 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 |------|------|--------|
 | 1 | Admin bans / unban | **done** (v0.1.11) |
 | 2 | Request-ID early deny | **done** (v0.1.12) |
-| 3 | PROXY-reject JSONL | pending |
+| 3 | PROXY-reject JSONL | **done** (v0.1.13) |
 | 4 | audit_dropped metrics | pending |
 | 5 | cgroup↔limits docs | pending |
 | 6 | Selftest deepen | pending |

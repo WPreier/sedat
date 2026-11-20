@@ -216,7 +216,10 @@ async fn proxy_injection_rejected_when_inbound_disabled() {
 
     let result = accept.await.unwrap().unwrap();
     assert!(
-        result.is_none(),
+        matches!(
+            result,
+            Err(sedat::proxy::ProxyRejectReason::UntrustedOrDisabled)
+        ),
         "PROXY injection must be rejected when inbound_enabled=false"
     );
 }
@@ -240,7 +243,13 @@ async fn proxy_injection_v2_rejected_untrusted_peer() {
         .unwrap();
 
     let result = accept.await.unwrap().unwrap();
-    assert!(result.is_none(), "untrusted peer PROXY v2 must be rejected");
+    assert!(
+        matches!(
+            result,
+            Err(sedat::proxy::ProxyRejectReason::UntrustedOrDisabled)
+        ),
+        "untrusted peer PROXY v2 must be rejected"
+    );
 }
 
 #[tokio::test]
@@ -265,6 +274,57 @@ async fn proxy_trusted_inbound_rewrites_client_ip() {
     assert_eq!(client_addr.ip().to_string(), "203.0.113.9");
     assert_eq!(client_addr.port(), 4444);
     drop(stream);
+}
+
+#[tokio::test]
+async fn proxy_reject_writes_jsonl_audit() {
+    use sedat::audit::AuditSink;
+    use sedat::proxy::ProxyRejectReason;
+
+    let dir = tempfile::tempdir().unwrap();
+    let audit_path = dir.path().join("audit.jsonl");
+    let audit_str = audit_path.to_str().unwrap();
+
+    let mut cfg = test_config("http://127.0.0.1:9", Default::default());
+    cfg.logging.audit_jsonl = audit_str.into();
+    cfg.logging.audit_jsonl_max_bytes = 0;
+    cfg.proxy_protocol.inbound_enabled = false;
+    let audit = AuditSink::open(audit_str, 0).unwrap();
+    let state = ProxyState::with_audit(cfg, audit);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        let _ = sedat::proxy::serve_http(listener, state).await;
+    });
+    tokio::time::sleep(Duration::from_millis(40)).await;
+
+    let mut client = TcpStream::connect(addr).await.unwrap();
+    let spoof: std::net::SocketAddr = "203.0.113.9:4444".parse().unwrap();
+    let local: std::net::SocketAddr = "10.0.0.1:443".parse().unwrap();
+    client.write_all(&encode_proxy_v1(spoof, local)).await.unwrap();
+    client
+        .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(80)).await;
+
+    let text = std::fs::read_to_string(&audit_path).unwrap();
+    assert!(
+        text.contains("\"event\":\"proxy_reject\""),
+        "missing proxy_reject: {text}"
+    );
+    assert!(
+        text.contains(&format!(
+            "\"reason\":\"{}\"",
+            ProxyRejectReason::UntrustedOrDisabled.as_str()
+        )),
+        "missing reason: {text}"
+    );
+    assert!(
+        text.contains("\"stage\":\"plaintext\""),
+        "missing stage: {text}"
+    );
+    assert!(text.contains("\"request_id\":null"), "expected null request_id: {text}");
 }
 
 #[tokio::test]
@@ -348,7 +408,10 @@ async fn plaintext_proxy_rejected_when_placement_after_tls() {
 
     let result = accept.await.unwrap().unwrap();
     assert!(
-        result.is_none(),
+        matches!(
+            result,
+            Err(sedat::proxy::ProxyRejectReason::PlaintextWhenAfterTls)
+        ),
         "plaintext PROXY must be rejected when inbound_placement=after_tls"
     );
 }

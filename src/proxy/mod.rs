@@ -12,7 +12,8 @@ pub use upstream_mtls::{build_upstream_client_config, UpstreamTlsPaths};
 pub use proxy_protocol::{
     accept_with_inbound_proxy, accept_with_inbound_proxy_placement, apply_inbound_after_tls,
     encode_proxy_v1, encode_proxy_v2, inbound_on_plaintext, inbound_on_tls, inbound_proxy_trusted,
-    probe_inbound_proxy_reader, PrefixedIo, PrefixedStream, ProxyVersion, PROXY_V2_SIG,
+    probe_inbound_proxy_reader, PrefixedIo, PrefixedStream, ProxyRejectReason, ProxyVersion,
+    PROXY_V2_SIG,
 };
 pub use request_id::{
     generate_request_id, http_headers_complete, resolve_request_id, resolve_request_id_from_raw,
@@ -547,9 +548,18 @@ pub async fn serve_http(listener: TcpListener, state: ProxyState) -> std::io::Re
             )
             .await
             {
-                Ok(Some(v)) => v,
-                Ok(None) => {
-                    warn!(%peer, "rejected inbound PROXY (untrusted, disabled, or after_tls on plaintext)");
+                Ok(Ok(v)) => v,
+                Ok(Err(reason)) => {
+                    warn!(
+                        %peer,
+                        reason = reason.as_str(),
+                        "rejected inbound PROXY (plaintext)"
+                    );
+                    state.audit.emit_proxy_reject(
+                        &peer.to_string(),
+                        reason.as_str(),
+                        "plaintext",
+                    );
                     return;
                 }
                 Err(e) => {
