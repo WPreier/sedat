@@ -27,6 +27,7 @@ fn cfg(upstream: &str, allowlist: Vec<String>) -> SedatConfig {
                     prefix: "/".into(),
                     upstream: upstream.into(),
                     upstream_allowlist: allowlist,
+                    ..Default::default()
                 }],
             }],
         },

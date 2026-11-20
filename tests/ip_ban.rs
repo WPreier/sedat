@@ -31,7 +31,7 @@ fn test_config(audit_path: &str) -> SedatConfig {
                 paths: vec![PathRoute {
                     prefix: "/".into(),
                     upstream: "http://127.0.0.1:9".into(),
-                    upstream_allowlist: vec![],
+                    ..Default::default()
                 }],
             }],
         },

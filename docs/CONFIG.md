@@ -43,8 +43,12 @@ dns_file = "./state/acme-dns-challenge.txt"
 host = "localhost"
 [[routes.hosts.paths]]
 prefix = "/"
-upstream = "http://127.0.0.1:9080"
+upstream = "http://127.0.0.1:9080"   # recommended default (plaintext)
+# upstream = "https://backend.internal:9443"  # optional TLS to upstream
 # upstream_allowlist = ["127.0.0.1", "10.0.0.0/8"]  # empty = no pin
+# upstream_mtls_cert = "./certs/client.crt"   # optional mTLS (both cert+key)
+# upstream_mtls_key  = "./certs/client.key"
+# upstream_mtls_ca   = "./certs/upstream-ca.crt"  # empty = webpki roots
 
 [proxy_protocol]
 outbound = "v2"          # off | v1 | v2
@@ -100,6 +104,8 @@ Additional P09 / P10 rules:
 - `server.admin_token` max 512 bytes; `admin_token_file` must be empty or a local path.
 - Admin token precedence: `SEDAT_ADMIN_TOKEN` → `admin_token_file` → `admin_token`.
 - `upstream_allowlist` entries must be valid IPs/CIDRs when set.
+- `upstream` may be `http://` or `https://`. `upstream_mtls_*` requires `https://`;
+  cert+key must both be set or both empty; PEM paths must exist when set.
 
 ## Schema version & migration (fail-closed)
 

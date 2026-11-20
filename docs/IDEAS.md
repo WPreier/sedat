@@ -25,7 +25,8 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 - Admin capability tokens (E4) — **done** (`AUTH` / `SEDAT_ADMIN_TOKEN`)
 - Admin selftest (E6) — **done** (`selftest`)
 - Upstream IP pin (E3) — **done** (`upstream_allowlist`)
-- Optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
+- Optional mTLS (E1) — **done** (`upstream_mtls_*`, default off)
+- ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
 - Admin `unban` / list bans — deferred (needs Limiter admin surface)
 
 ## Open / later (see also ROADMAP_P09 extras / P10)
@@ -35,7 +36,7 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 | Full seccomp BPF profiles | Ship known-good profiles for `required` | P10.9 (E7) |
 | ARI (ACME Renewal Info) | Prefer when CA supports | P10.8 (E2) |
 | Multiple DNS providers | Trait ready; Cloudflare first | Extend as needed |
-| mTLS to upstream Seda | Private-net spoof defense | P10.7 (E1, optional) |
+| mTLS to upstream Seda | Private-net spoof defense | P10.7 (E1, optional) — done |
 | Admin capability tokens | Beyond FS ACL | **done** P10.4 (E4) |
 | Admin unban / ban list | Ops after P10.3 | Deferred |
 | JSONL audit sink | SIEM-friendly | **done** P10.2 (E5) |

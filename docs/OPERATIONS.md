@@ -160,6 +160,24 @@ upstream_allowlist = ["10.0.0.5", "10.0.0.0/8"]
 When set, SeDat only connects to resolved peers in the list (fail-closed). See
 [phases/P10_06_upstream_ip_pin.md](phases/P10_06_upstream_ip_pin.md).
 
+## Optional upstream HTTPS / mTLS
+
+Default remains plaintext `http://`. To speak TLS (and optionally present a client
+cert) to the upstream:
+
+```toml
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "https://backend.internal:9443"
+upstream_mtls_cert = "./certs/sedat-client.crt"
+upstream_mtls_key  = "./certs/sedat-client.key"
+upstream_mtls_ca   = "./certs/upstream-ca.crt"
+```
+
+Leave cert/key/CA empty for off. Prefer `proxy_protocol.outbound = "off"` with
+HTTPS upstreams (PROXY before TLS is skipped anyway). See
+[phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md).
+
 ## Temporary IP bans
 
 After consecutive rate-limit denials, SeDat can temporarily ban the client IP:

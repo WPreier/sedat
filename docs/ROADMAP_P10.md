@@ -121,11 +121,12 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending (optional / kann, nicht muss) |
+| **Status** | **done** (optional / kann, nicht muss) |
 | **Depends on** | P10.6 helpful but not hard-required |
-| **Config** | Client cert/key paths; default off |
-| **Behavior** | Optional TLS+client-auth to upstream |
-| **Verify** | Integration with mock mTLS upstream; default remains plaintext HTTP upstream |
+| **Config** | `https://` upstream + optional `upstream_mtls_cert` / `_key` / `_ca` (default off) |
+| **Behavior** | Optional TLS (+ client-auth) to upstream; PROXY skipped on HTTPS wire |
+| **Verify** | `cargo test upstream_mtls`; default remains plaintext `http://` |
+| **Phase note** | [phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md) |
 
 ### P10.8 – E2 ACME ARI
 
@@ -175,7 +176,7 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 | 4 | E4 Admin-Tokens | **done** |
 | 5 | E6 Admin-selftest | **done** |
 | 6 | E3 Upstream-IP-Pin | **done** |
-| 7 | E1 optional mTLS Upstream | pending |
+| 7 | E1 optional mTLS Upstream | **done** |
 | 8 | E2 ACME ARI | pending |
 | 9 | E7 Seccomp-BPF | pending |
 | 10 | systemd Memory/cgroup Limits | pending |

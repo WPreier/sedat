@@ -1,6 +1,6 @@
 [package]
 name = "sedat"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 rust-version = "1.75"
 description = "Minimal, high-security reverse proxy (companion to Seda)"
@@ -29,6 +29,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 tokio-rustls = "0.26"
 rustls-pemfile = "2.2"
 rustls-pki-types = "1.11"
+webpki-roots = "0.26"
 
 # ACME
 instant-acme = "0.7"

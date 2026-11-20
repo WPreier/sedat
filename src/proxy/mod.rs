@@ -4,9 +4,11 @@ mod forward;
 mod proxy_protocol;
 mod request_id;
 mod router;
+mod upstream_mtls;
 mod upstream_pin;
 
 pub use forward::{proxy_request, ProxyError, RequestIdFwd};
+pub use upstream_mtls::{build_upstream_client_config, UpstreamTlsPaths};
 pub use proxy_protocol::{
     accept_with_inbound_proxy, accept_with_inbound_proxy_placement, apply_inbound_after_tls,
     encode_proxy_v1, encode_proxy_v2, inbound_on_plaintext, inbound_on_tls, inbound_proxy_trusted,

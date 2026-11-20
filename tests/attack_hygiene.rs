@@ -30,7 +30,7 @@ fn test_config(upstream: &str, limits: sedat::config::LimitsConfig) -> SedatConf
                 paths: vec![PathRoute {
                     prefix: "/".into(),
                     upstream: upstream.into(),
-                    upstream_allowlist: vec![],
+                    ..Default::default()
                 }],
             }],
         },

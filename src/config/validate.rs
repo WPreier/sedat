@@ -1,6 +1,7 @@
 //! Regex and semantic validation for client-visible config fields.
 
 use std::net::IpAddr;
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::OnceLock;
 
@@ -286,11 +287,56 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
                     format!("invalid upstream URL `{}`", p.upstream),
                 ));
             }
-            if p.upstream.starts_with("https://") {
-                // MVP forwards plain HTTP to upstream; https upstream not yet supported.
+            let is_https = p.upstream.starts_with("https://");
+            let has_cert = !p.upstream_mtls_cert.trim().is_empty();
+            let has_key = !p.upstream_mtls_key.trim().is_empty();
+            let has_ca = !p.upstream_mtls_ca.trim().is_empty();
+            if has_cert != has_key {
+                return Err(err(
+                    find_line(
+                        source,
+                        if has_cert {
+                            &p.upstream_mtls_cert
+                        } else {
+                            &p.upstream_mtls_key
+                        },
+                    ),
+                    "upstream_mtls_cert and upstream_mtls_key must both be set or both empty",
+                ));
+            }
+            if (has_cert || has_ca) && !is_https {
                 return Err(err(
                     find_line(source, &p.upstream),
-                    "upstream must be http:// (TLS to backend not supported in MVP)",
+                    "upstream_mtls_* requires https:// upstream (default remains http://)",
+                ));
+            }
+            if has_cert {
+                if !Path::new(p.upstream_mtls_cert.trim()).is_file() {
+                    return Err(err(
+                        find_line(source, &p.upstream_mtls_cert),
+                        format!(
+                            "upstream_mtls_cert file not found: {}",
+                            p.upstream_mtls_cert.trim()
+                        ),
+                    ));
+                }
+                if !Path::new(p.upstream_mtls_key.trim()).is_file() {
+                    return Err(err(
+                        find_line(source, &p.upstream_mtls_key),
+                        format!(
+                            "upstream_mtls_key file not found: {}",
+                            p.upstream_mtls_key.trim()
+                        ),
+                    ));
+                }
+            }
+            if has_ca && !Path::new(p.upstream_mtls_ca.trim()).is_file() {
+                return Err(err(
+                    find_line(source, &p.upstream_mtls_ca),
+                    format!(
+                        "upstream_mtls_ca file not found: {}",
+                        p.upstream_mtls_ca.trim()
+                    ),
                 ));
             }
             for cidr in &p.upstream_allowlist {
@@ -434,5 +480,37 @@ upstream = "http://127.0.0.1:9080"
         let ip: IpAddr = "10.1.2.3".parse().unwrap();
         assert!(ip_in_allowlist(ip, &["10.0.0.0/8".into()]));
         assert!(!ip_in_allowlist(ip, &["192.168.0.0/16".into()]));
+    }
+
+    #[test]
+    fn allows_https_upstream_without_mtls() {
+        let toml = r#"
+schema_version = 1
+[[routes.hosts]]
+host = "localhost"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "https://127.0.0.1:9443"
+"#;
+        parse_toml(toml).expect("https upstream should validate");
+    }
+
+    #[test]
+    fn rejects_mtls_on_http_upstream() {
+        let toml = r#"
+schema_version = 1
+[[routes.hosts]]
+host = "localhost"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://127.0.0.1:9080"
+upstream_mtls_cert = "/tmp/client.crt"
+upstream_mtls_key = "/tmp/client.key"
+"#;
+        let err = parse_toml(toml).unwrap_err();
+        assert!(
+            err.to_string().contains("https://") || err.to_string().contains("upstream_mtls"),
+            "{err}"
+        );
     }
 }
