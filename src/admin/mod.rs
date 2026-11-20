@@ -1,5 +1,9 @@
 //! Unix-domain admin socket (status / reload / cert-info) + optional loopback metrics sidecar.
 
+mod auth;
+
+pub use auth::{parse_auth_line, resolve_admin_token, token_matches, ADMIN_TOKEN_ENV};
+
 use std::path::Path;
 use std::sync::Arc;
 
@@ -154,52 +158,108 @@ pub async fn serve_metrics_sidecar(addr: std::net::SocketAddr, state: AdminState
 async fn handle_client(conn: tokio::net::UnixStream, state: AdminState) -> std::io::Result<()> {
     let (reader, mut writer) = conn.into_split();
     let mut lines = BufReader::new(reader).lines();
+    let mut authed = false;
     while let Some(line) = lines.next_line().await? {
-        let cmd = line.trim().to_ascii_lowercase();
-        let reply = match cmd.as_str() {
-            "status" | "stats" => format_status(&state),
-            "health" | "ready" => "OK healthy\n".to_string(),
-            "metrics" => {
-                let body = prometheus_text(&state);
-                format!("OK metrics\n{body}")
-            }
-            "reload" => match config::try_reload(&state.user_config, &state.state_dir) {
-                Ok(active) => {
-                    let prev = state.config.load_full();
-                    let changes = security_diff(&prev, &active.config);
-                    let summary = format_audit_summary(&changes);
-                    for c in &changes {
-                        info!(
-                            target: "sedat::audit",
-                            key = %c.key,
-                            old = %c.old,
-                            new = %c.new,
-                            "config reload security diff"
-                        );
-                    }
-                    if let Err(e) = state.audit.reconfigure(
-                        &active.config.logging.audit_jsonl,
-                        active.config.logging.audit_jsonl_max_bytes,
-                    ) {
-                        warn!(error = %e, "audit jsonl reconfigure failed");
-                    }
-                    state.audit.emit_config_reload(&changes, &summary);
-                    state.config.store(Arc::new(active.config));
-                    format!("OK reload audit={summary}\n")
-                }
-                Err(e) => format!("ERR reload: {e}\n"),
-            },
-            "cert" | "cert-info" | "cert_info" => format_cert(&state),
-            "help" => "commands: status | health | metrics | reload | cert | quit\n".into(),
-            "quit" | "exit" => {
-                writer.write_all(b"OK bye\n").await?;
-                break;
-            }
-            other => format!("ERR unknown command: {other}\n"),
-        };
+        let (reply, done) = dispatch_admin_line(&state, &mut authed, &line);
         writer.write_all(reply.as_bytes()).await?;
+        if done {
+            break;
+        }
     }
     Ok(())
+}
+
+/// Process one admin protocol line. Returns `(reply, close_connection)`.
+///
+/// When a token is configured, `AUTH <token>` is required before other commands
+/// (except `help` / `quit`). Empty token config → FS ACL only (dev-friendly).
+#[must_use]
+pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) -> (String, bool) {
+    let expected = resolve_admin_token(&state.config.load());
+    let token_required = expected.is_some();
+
+    if let Some(presented) = parse_auth_line(line) {
+        return match &expected {
+            None => (
+                "ERR auth not required (no admin token configured)\n".into(),
+                false,
+            ),
+            Some(exp) => {
+                if presented.is_empty() {
+                    warn!(target: "sedat::audit", "admin AUTH missing token");
+                    state.audit.emit_admin_auth_fail("missing_token");
+                    *authed = false;
+                    ("ERR auth failed\n".into(), false)
+                } else if token_matches(presented, exp) {
+                    *authed = true;
+                    info!(target: "sedat::audit", "admin AUTH ok");
+                    ("OK auth\n".into(), false)
+                } else {
+                    warn!(target: "sedat::audit", "admin AUTH failed");
+                    state.audit.emit_admin_auth_fail("bad_token");
+                    *authed = false;
+                    ("ERR auth failed\n".into(), false)
+                }
+            }
+        };
+    }
+
+    let cmd = line.trim().to_ascii_lowercase();
+    if matches!(cmd.as_str(), "quit" | "exit") {
+        return ("OK bye\n".into(), true);
+    }
+    if cmd == "help" {
+        let help = if token_required {
+            "commands: AUTH <token> | status | health | metrics | reload | cert | quit\n"
+        } else {
+            "commands: status | health | metrics | reload | cert | quit\n"
+        };
+        return (help.into(), false);
+    }
+
+    if token_required && !*authed {
+        warn!(target: "sedat::audit", command = %cmd, "admin command rejected (auth required)");
+        state.audit.emit_admin_auth_fail("required");
+        return ("ERR auth required (send AUTH <token> first)\n".into(), false);
+    }
+
+    let reply = match cmd.as_str() {
+        "status" | "stats" => format_status(state),
+        "health" | "ready" => "OK healthy\n".to_string(),
+        "metrics" => {
+            let body = prometheus_text(state);
+            format!("OK metrics\n{body}")
+        }
+        "reload" => match config::try_reload(&state.user_config, &state.state_dir) {
+            Ok(active) => {
+                let prev = state.config.load_full();
+                let changes = security_diff(&prev, &active.config);
+                let summary = format_audit_summary(&changes);
+                for c in &changes {
+                    info!(
+                        target: "sedat::audit",
+                        key = %c.key,
+                        old = %c.old,
+                        new = %c.new,
+                        "config reload security diff"
+                    );
+                }
+                if let Err(e) = state.audit.reconfigure(
+                    &active.config.logging.audit_jsonl,
+                    active.config.logging.audit_jsonl_max_bytes,
+                ) {
+                    warn!(error = %e, "audit jsonl reconfigure failed");
+                }
+                state.audit.emit_config_reload(&changes, &summary);
+                state.config.store(Arc::new(active.config));
+                format!("OK reload audit={summary}\n")
+            }
+            Err(e) => format!("ERR reload: {e}\n"),
+        },
+        "cert" | "cert-info" | "cert_info" => format_cert(state),
+        other => format!("ERR unknown command: {other}\n"),
+    };
+    (reply, false)
 }
 
 fn format_status(state: &AdminState) -> String {
@@ -258,6 +318,19 @@ mod tests {
     use super::*;
     use crate::limits::Limiter;
 
+    fn sample_state_with(mut cfg: SedatConfig, audit: AuditSink) -> AdminState {
+        std::env::remove_var(ADMIN_TOKEN_ENV);
+        cfg.server.admin_token_file.clear();
+        AdminState {
+            user_config: "x".into(),
+            state_dir: "y".into(),
+            config: Arc::new(ArcSwap::from_pointee(cfg)),
+            limiter: Limiter::new(Default::default()),
+            acme_status: None,
+            audit,
+        }
+    }
+
     fn sample_state() -> AdminState {
         let cfg = SedatConfig {
             schema_version: 1,
@@ -272,14 +345,7 @@ mod tests {
             logging: Default::default(),
             hardening: Default::default(),
         };
-        AdminState {
-            user_config: "x".into(),
-            state_dir: "y".into(),
-            config: Arc::new(ArcSwap::from_pointee(cfg)),
-            limiter: Limiter::new(Default::default()),
-            acme_status: None,
-            audit: AuditSink::disabled(),
-        }
+        sample_state_with(cfg, AuditSink::disabled())
     }
 
     #[test]
@@ -290,6 +356,56 @@ mod tests {
         assert!(metrics.contains("sedat_connections_active"));
         assert!(metrics.contains("sedat_schema_version 1"));
         assert!(metrics.contains("# TYPE sedat_info gauge"));
+    }
+
+    #[test]
+    fn token_required_rejects_until_auth() {
+        let mut cfg = SedatConfig {
+            schema_version: 1,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.admin_token = "good-token".into();
+        let dir = tempfile::tempdir().unwrap();
+        let audit_path = dir.path().join("a.jsonl");
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let state = sample_state_with(cfg, audit);
+        let mut authed = false;
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "status");
+        assert!(r.starts_with("ERR auth required"), "{r}");
+        assert!(!authed);
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "AUTH bad");
+        assert!(r.starts_with("ERR auth failed"), "{r}");
+        assert!(!authed);
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "AUTH good-token");
+        assert_eq!(r, "OK auth\n");
+        assert!(authed);
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "health");
+        assert_eq!(r, "OK healthy\n");
+
+        let text = std::fs::read_to_string(&audit_path).unwrap();
+        assert!(text.contains("\"event\":\"admin_auth_fail\""));
+        assert!(text.contains("\"reason\":\"required\"") || text.contains("\"reason\":\"bad_token\""));
+    }
+
+    #[test]
+    fn no_token_allows_commands() {
+        let state = sample_state();
+        let mut authed = false;
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "health");
+        assert_eq!(r, "OK healthy\n");
     }
 
     #[test]

@@ -89,11 +89,12 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending |
+| **Status** | **done** |
 | **Depends on** | Admin socket ACL (P09.5) |
-| **Config** | Token file / env; fail-closed if misconfigured when required |
-| **Behavior** | Optional `AUTH <token>` before admin commands |
-| **Verify** | Unit/integration: reject without token when enabled; accept with token |
+| **Config** | `server.admin_token` / `admin_token_file` / env `SEDAT_ADMIN_TOKEN` (empty = FS ACL only) |
+| **Behavior** | When token set: require `AUTH <token>` (constant-time); audit `admin_auth_fail` on failure |
+| **Verify** | `cargo test admin` |
+| **Phase note** | [phases/P10_04_admin_tokens.md](phases/P10_04_admin_tokens.md) |
 
 ### P10.5 – E6 Admin-selftest
 
@@ -169,7 +170,7 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 | 1 | Request-ID über PROXY | **done** |
 | 2 | E5 JSONL-Audit-Log | **done** |
 | 3 | Temporäre IP-Bans + Logging | **done** |
-| 4 | E4 Admin-Tokens | pending |
+| 4 | E4 Admin-Tokens | **done** |
 | 5 | E6 Admin-selftest | pending |
 | 6 | E3 Upstream-IP-Pin | pending |
 | 7 | E1 optional mTLS Upstream | pending |

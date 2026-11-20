@@ -7,6 +7,8 @@ http_redirect_listen = "127.0.0.1:8081"
 state_dir = "./state"
 admin_socket = "./state/admin.sock"
 # admin_group = "sedat-admin"   # when set → socket mode 0660 + group
+# admin_token = ""              # empty = FS ACL only (dev); set token in prod
+# admin_token_file = "./state/admin.token"
 # metrics_listen = "127.0.0.1:9090"  # optional loopback Prometheus sidecar
 
 [tls]

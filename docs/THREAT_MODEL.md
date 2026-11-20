@@ -27,7 +27,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 ```
 
 1. **Public listeners** – all clients untrusted.
-2. **Admin socket** – filesystem ACL (`0600` or `0660`+group); no HTTP admin on public listeners.
+2. **Admin socket** – filesystem ACL (`0600` or `0660`+group); optional capability token (`AUTH`); no HTTP admin on public listeners.
 3. **Inbound PROXY** – default **off**. When enabled, only allowlisted CIDRs may send PROXY; others are dropped. With `after_tls`, plaintext PROXY is rejected.
 4. **Upstream** – SeDat is the sole trusted PROXY source; Mock-Seda/Seda enforce their own trust CIDRs.
 5. **Sandbox** – after drop, Landlock/NO_NEW_PRIVS reduce RCE blast radius (Linux `auto`).
@@ -49,6 +49,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 | T11 | HTTP/2 CONTINUATION / HPACK bomb | Caps + hyper; negative corpus | `tests/h2_attack_corpus.rs` |
 | T12 | Plaintext PROXY when PP2-over-TLS expected | `inbound_placement=after_tls` rejects plaintext PROXY | `tests/attack_hygiene.rs` |
 | T13 | Sustained per-IP flood after burst | Temporary IP ban after consecutive rate-limit strikes (`403` until TTL) | `tests/ip_ban.rs`, `src/limits` |
+| T14 | Admin socket abuse after ACL bypass | Optional `AUTH` token (constant-time); failed auth audited | `src/admin` |
 
 ## PROXY Protocol policy (detail)
 

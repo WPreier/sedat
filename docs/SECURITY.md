@@ -23,7 +23,7 @@ Full write-up: **[THREAT_MODEL.md](THREAT_MODEL.md)** (assets, trust boundaries,
 | Privilege / RCE blast radius | Drop after bind; **Landlock + NO_NEW_PRIVS** (`[hardening]`, Linux `auto`) |
 | Log blocking | Async bounded channel; drop+metric on overflow |
 | Cert loss on renew fail | Hot-swap; keep previous cert on ACME failure |
-| Admin exposure | Unix socket `0600` default, or `0660` + `server.admin_group`; no public HTTP admin |
+| Admin exposure | Unix socket `0600` default, or `0660` + `server.admin_group`; optional capability token (`AUTH`); no public HTTP admin |
 | Metrics exposure | Admin socket / optional **loopback-only** sidecar; never public control plane |
 | Schema surprise upgrades | Exact `schema_version`; migrate helper fail-closed |
 
@@ -63,10 +63,11 @@ Applied **after** privilege drop. Unsupported kernels: `auto` skips; `required` 
 
 ## Admin / metrics / health
 
-- Control plane: Unix admin socket — `status`, `health`, `metrics`, `reload`, `cert`.
+- Control plane: Unix admin socket — `status`, `health`, `metrics`, `reload`, `cert` (+ `AUTH` when token configured).
 - Socket ACL: owner `0600`, or `0660` when `server.admin_group` is set.
-- Optional `server.metrics_listen = "127.0.0.1:9090"` loopback Prometheus sidecar (`GET /metrics`).
-- Scrape without sidecar: `scripts/prometheus_admin_scrape.sh`.
+- **Admin token (P10.4):** when `SEDAT_ADMIN_TOKEN` / `admin_token_file` / `admin_token` is set, require `AUTH <token>` (constant-time verify). Empty token = FS ACL only (document as weak for production). Failed auth audited as `admin_auth_fail`.
+- Optional `server.metrics_listen = "127.0.0.1:9090"` loopback Prometheus sidecar (`GET /metrics`) — not gated by admin token.
+- Scrape without sidecar: `scripts/prometheus_admin_scrape.sh` (pass token via `SEDAT_ADMIN_TOKEN` if required).
 - **Never** expose SeDat metrics/health as a public HTTP control plane.
 
 ## Logging
@@ -94,7 +95,8 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 - [x] Request-ID across PROXY (`x-request-id` HTTP header after framing)
 - [x] JSONL audit sink (E5)
 - [x] Temporary IP bans after rate-limit series
-- [ ] Admin tokens / selftest / upstream pin / optional mTLS / ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
+- [x] Admin capability tokens (E4)
+- [ ] Admin selftest / upstream pin / optional mTLS / ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
 
 ## Reporting
 
