@@ -12,8 +12,8 @@
 ```
 Client
    ↓
-SeDat (HTTPS, HTTP/1.1 + HTTP/2 + HTTP/3)
-   ↓  PROXY Protocol v1/v2 (empfohlen) oder HTTP
+SeDat (HTTPS, HTTP/1.1 + HTTP/2 + optional HTTP/3)
+   ↓  PROXY Protocol v2 (empfohlen) oder HTTP
 Seda (HTTP, Seiten aus Memory)
 ```
 
@@ -21,10 +21,22 @@ Seda (HTTP, Seiten aus Memory)
 
 - Identische Config-Philosophie (versteckte aktive Kopie, Fail-Closed mit Zeilennummer, `--resetconfig`)
 - Gleiche Security-Anforderungen (Privilege Drop, Limits, non-blocking Logging)
-- Beide Binaries enthalten die Dokumentation des jeweils anderen
+- Beide Binaries können die Dokumentation des jeweils anderen einbetten
 - `/sedat` und `/seda` liefern die eingebettete Dokumentation (konfigurierbar, Standard: aktiv)
 
 ## Empfohlene Betriebsart
 
-- SeDat terminiert TLS und spricht Seda über PROXY Protocol auf localhost oder internem Netz an.
-- Seda vertraut nur den von SeDat gesetzten PROXY-Headern.
+- SeDat terminiert TLS und spricht Seda über **PROXY Protocol v2** auf localhost oder internem Netz an.
+- Seda vertraut nur PROXY-Headern von SeDat (Trust-Allowlist / nur lokales Netz).
+- **Inbound PROXY** auf SeDat: Standard **aus**; nur mit expliziter CIDR-Allowlist aktivieren.
+- Seda darf nicht aus dem Internet erreichbar sein.
+- **Request-ID:** SeDat setzt standardmäßig `x-request-id` als **HTTP-Header nach** dem PROXY-Framing (kein PROXY-TLV). Seda/Mock-Seda können den Header für Logs korrelieren; ungültige Client-Werte werden ersetzt.
+
+## Trust-Boundary-Tests
+
+- Mock-Seda akzeptiert PROXY nur von erlaubten Quell-IPs.
+- Spoofing von Client-IPs über gefälschte PROXY-Frames von Fremd-IPs muss scheitern.
+
+## Dev-Double
+
+`deploy/mock-seda/` und Compose-Service `mock-seda` implementieren einen minimalen Upstream mit PROXY-Parser für CI/E2E, falls kein echtes Seda-Binary vorliegt.

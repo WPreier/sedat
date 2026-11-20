@@ -1,0 +1,36 @@
+# Rust
+/target/
+**/*.rs.bk
+# Cargo.lock is committed for the binary crate
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# SeDat runtime state
+.sedat.active.toml
+*.active.toml
+/state/
+/data/
+/certs/
+acme_account.json
+*.pem
+*.key
+!examples/**/*.pem
+!testdata/**/*
+
+# Logs / coverage
+*.log
+/coverage/
+lcov.info
+
+# Docker
+.env.local

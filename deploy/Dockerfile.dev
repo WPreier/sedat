@@ -1,0 +1,6 @@
+# Dev image: full toolchain for `cargo test` / clippy inside Compose
+FROM rust:latest
+RUN rustup component add clippy rustfmt
+WORKDIR /src
+COPY . .
+CMD ["cargo", "test"]

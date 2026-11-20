@@ -1,0 +1,58 @@
+schema_version = 1
+
+[server]
+listen = "127.0.0.1:8080"
+listen_tls = "127.0.0.1:8443"
+http_redirect_listen = "127.0.0.1:8081"
+state_dir = "./state"
+admin_socket = "./state/admin.sock"
+
+[tls]
+enabled = false
+
+[acme]
+enabled = false
+directory = "staging"
+email = "admin@example.com"
+domains = []
+dns_provider = "file"
+dns_file = "./state/acme-dns-challenge.txt"
+
+[[routes.hosts]]
+host = "localhost"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://127.0.0.1:9080"
+
+[proxy_protocol]
+outbound = "v2"
+inbound_enabled = false
+inbound_allowlist = []
+inbound_placement = "before_tls"
+
+[hardening]
+landlock = "auto"
+seccomp = "auto"
+
+[limits]
+max_connections = 1024
+max_header_bytes = 16384
+max_headers = 100
+max_body_bytes = 1048576
+request_timeout_secs = 30
+idle_timeout_secs = 60
+rate_limit_per_ip = 100
+rate_limit_burst = 20
+
+[embedded_docs]
+enabled = true
+sedat_path = "/sedat"
+seda_path = "/seda"
+
+[experimental]
+h3 = false
+
+[logging]
+level = "info"
+request_id = true
+request_id_header = "x-request-id"

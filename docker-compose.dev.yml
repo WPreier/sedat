@@ -1,0 +1,85 @@
+# SeDat development stack — Mock-Seda, Pebble (ACME), optional DNS mock
+services:
+  sedat:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - ./state:/app/state
+      - ./examples/config/good.toml:/app/config.toml:ro
+    command: ["sedat", "--config", "/app/config.toml", "--listen", "0.0.0.0:8080"]
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      - mock-seda
+    profiles: ["proxy"]
+
+  mock-seda:
+    build:
+      context: deploy/mock-seda
+    ports:
+      - "9080:9080"
+    environment:
+      LISTEN: "0.0.0.0:9080"
+      TRUST_CIDRS: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"
+
+  pebble:
+    image: ghcr.io/letsencrypt/pebble:latest
+    command: pebble -config /test/config/pebble-config.json -dnsserver 10.30.50.3:8053
+    ports:
+      - "14000:14000"
+      - "15000:15000"
+    environment:
+      PEBBLE_VA_NOSLEEP: "1"
+      # CI / local file-DNS path: validation always succeeds (no real DNS required).
+      PEBBLE_VA_ALWAYS_VALID: "1"
+    profiles: ["acme"]
+
+  # Placeholder DNS challenge helper (file-based ACME in-process needs no container)
+  dns-mock:
+    image: alpine:3.20
+    command: ["sleep", "infinity"]
+    profiles: ["acme"]
+
+  # Optional one-shot issuance against the pebble service (profile acme).
+  pebble-issue:
+    image: rust:latest
+    working_dir: /src
+    volumes:
+      - .:/src
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-git:/usr/local/cargo/git
+      - cargo-target:/src/target
+    environment:
+      PEBBLE_DIRECTORY: https://pebble:14000/dir
+      SEDAT_PEBBLE_ISSUE_STATE: /src/state/pebble-ci
+      CARGO_TERM_COLOR: always
+    command:
+      - bash
+      - -lc
+      - |
+        set -euo pipefail
+        mkdir -p /src/state/pebble-ci
+        for i in $(seq 1 60); do
+          curl -skf https://pebble:14000/dir >/dev/null && break
+          sleep 1
+        done
+        cargo test --test pebble_issue -- --ignored --nocapture
+        test -f /src/state/pebble-ci/cert.pem
+        echo OK pebble-issue
+    depends_on:
+      - pebble
+    profiles: ["acme"]
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  cargo-target:

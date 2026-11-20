@@ -1,0 +1,5 @@
+target
+.git
+state
+*.sock
+agent-transcripts
