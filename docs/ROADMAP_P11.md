@@ -49,8 +49,9 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Counter when JSONL audit write is dropped under contention |
+| **Status** | **done** (v0.1.14) |
+| **Behavior** | Expose `sedat_audit_dropped_total` on admin/metrics + sidecar |
+| **Phase note** | [phases/P11_04_audit_dropped_metrics.md](phases/P11_04_audit_dropped_metrics.md) |
 
 ### P11.5 – Ops formula docs
 
@@ -73,6 +74,6 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 | 1 | Admin bans / unban | **done** (v0.1.11) |
 | 2 | Request-ID early deny | **done** (v0.1.12) |
 | 3 | PROXY-reject JSONL | **done** (v0.1.13) |
-| 4 | audit_dropped metrics | pending |
+| 4 | audit_dropped metrics | **done** (v0.1.14) |
 | 5 | cgroup↔limits docs | pending |
 | 6 | Selftest deepen | pending |

@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14] – 2026-11-21
+
+### Added
+
+- **P11.4 Prometheus `audit_dropped`:** counter `sedat_audit_dropped_total`
+  on admin `metrics` and the loopback `/metrics` sidecar (JSONL drops under
+  lock contention or I/O error). Phase note
+  [docs/phases/P11_04_audit_dropped_metrics.md](docs/phases/P11_04_audit_dropped_metrics.md).
+
 ## [0.1.13] – 2026-11-20
 
 ### Added
