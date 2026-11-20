@@ -288,7 +288,7 @@ mod tests {
             limiter: Limiter::new(Default::default()),
             acme_status: None,
             audit: AuditSink::disabled(),
-            started_at: Instant::now(),
+            started_at: now_start(),
         }
     }
 

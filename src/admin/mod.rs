@@ -4,7 +4,7 @@ mod auth;
 mod selftest;
 
 pub use auth::{parse_auth_line, resolve_admin_token, token_matches, ADMIN_TOKEN_ENV};
-pub use selftest::{run_selftest, SelftestCheck, SelftestReport};
+pub use selftest::{now_start, run_selftest, SelftestCheck, SelftestReport};
 
 use std::path::Path;
 use std::sync::Arc;
@@ -348,7 +348,7 @@ mod tests {
             limiter: Limiter::new(Default::default()),
             acme_status: None,
             audit,
-            started_at: Instant::now(),
+            started_at: now_start(),
         }
     }
 
