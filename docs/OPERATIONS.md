@@ -53,7 +53,11 @@ See [`deploy/Dockerfile`](../deploy/Dockerfile) and compose:
 - `USER` non-root after image setup
 - `cap_drop: [ALL]`
 - `security_opt: [no-new-privileges:true]`
+- optional host profile: `security_opt: ["seccomp=deploy/seccomp/sedat.json"]`
+  (SeDat also applies an in-process BPF allowlist when `hardening.seccomp` ≠ `off`)
 - read-only rootfs + writable state volume
+
+Seccomp modes: [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md).
 
 ## ACME / Pebble CI
 

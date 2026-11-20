@@ -27,14 +27,15 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 - Upstream IP pin (E3) — **done** (`upstream_allowlist`)
 - Optional mTLS (E1) — **done** (`upstream_mtls_*`, default off)
 - ACME ARI (E2) — **done** (`acme.ari` / `renew_days_before`)
-- seccomp-BPF (E7), systemd MemoryMax — **pending**
+- seccomp-BPF (E7) — **done** (`sedat-default-v1` allowlist)
+- systemd MemoryMax — **pending**
 - Admin `unban` / list bans — deferred (needs Limiter admin surface)
 
 ## Open / later (see also ROADMAP_P09 extras / P10)
 
 | Idea | Notes | Triage |
 |------|-------|--------|
-| Full seccomp BPF profiles | Ship known-good profiles for `required` | P10.9 (E7) |
+| Full seccomp BPF profiles | Ship known-good profiles for `required` | P10.9 (E7) — done |
 | ARI (ACME Renewal Info) | Prefer when CA supports | P10.8 (E2) — done |
 | Multiple DNS providers | Trait ready; Cloudflare first | Extend as needed |
 | mTLS to upstream Seda | Private-net spoof defense | P10.7 (E1, optional) — done |

@@ -300,7 +300,11 @@ pub struct HardeningConfig {
     /// Landlock FS restriction: `auto` (default), `off`, `required`.
     #[serde(default = "default_sandbox_mode")]
     pub landlock: String,
-    /// Seccomp / NO_NEW_PRIVS: `auto` (default), `off`, `required`.
+    /// Seccomp-BPF allowlist (+ NO_NEW_PRIVS): `auto` (default), `off`, `required`.
+    ///
+    /// - `auto`: install built-in BPF profile; on failure fall back to NO_NEW_PRIVS.
+    /// - `required`: fail closed if BPF cannot be installed (Linux little-endian).
+    /// - `off`: no seccomp / NO_NEW_PRIVS from SeDat.
     #[serde(default = "default_sandbox_mode")]
     pub seccomp: String,
 }

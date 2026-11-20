@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] – 2026-11-20
+
+### Added
+
+- **P10.9 / E7 Seccomp-BPF:** built-in syscall allowlist (`sedat-default-v1`) via
+  `seccompiler`, installed with TSYNC after drop. `hardening.seccomp=auto` falls
+  back to NO_NEW_PRIVS if BPF fails; `required` is fail-closed. Docker profile
+  mirror: `deploy/seccomp/sedat.json`.
+- Phase note [docs/phases/P10_09_seccomp_bpf.md](docs/phases/P10_09_seccomp_bpf.md).
+
 ## [0.1.8] – 2026-11-20
 
 ### Added

@@ -30,7 +30,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 2. **Admin socket** – filesystem ACL (`0600` or `0660`+group); optional capability token (`AUTH`); no HTTP admin on public listeners.
 3. **Inbound PROXY** – default **off**. When enabled, only allowlisted CIDRs may send PROXY; others are dropped. With `after_tls`, plaintext PROXY is rejected.
 4. **Upstream** – SeDat is the sole trusted PROXY source; Mock-Seda/Seda enforce their own trust CIDRs.
-5. **Sandbox** – after drop, Landlock/NO_NEW_PRIVS reduce RCE blast radius (Linux `auto`).
+5. **Sandbox** – after drop, Landlock + seccomp-BPF reduce RCE blast radius (Linux `auto`).
 
 ## Abuse cases & tests
 
@@ -45,7 +45,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 | T7 | Config downgrade / unknown schema | `schema_version` exact match; `migrate_toml` fail-closed | `src/config/migrate.rs` |
 | T8 | Bad reload | Previous active config retained | `src/config` unit tests |
 | T9 | Public metrics/admin HTTP | No built-in `/metrics`/`/health` control plane; loopback-only sidecar | `tests/attack_hygiene.rs`, admin metrics |
-| T10 | Privilege persistence / RCE blast | Drop after bind; Landlock + NO_NEW_PRIVS | `src/hardening` |
+| T10 | Privilege persistence / RCE blast | Drop after bind; Landlock + seccomp-BPF | `src/hardening` |
 | T11 | HTTP/2 CONTINUATION / HPACK bomb | Caps + hyper; negative corpus | `tests/h2_attack_corpus.rs` |
 | T12 | Plaintext PROXY when PP2-over-TLS expected | `inbound_placement=after_tls` rejects plaintext PROXY | `tests/attack_hygiene.rs` |
 | T13 | Sustained per-IP flood after burst | Temporary IP ban after consecutive rate-limit strikes (`403` until TTL) | `tests/ip_ban.rs`, `src/limits` |
@@ -78,7 +78,7 @@ See [CONFIG.md](CONFIG.md) and `sedat --migrate-config`. Unknown `schema_version
 
 ## Residual risks / non-goals
 
-- Full seccomp BPF syscall allowlists: proposed (ROADMAP_P09 E7); today NO_NEW_PRIVS + Landlock.
+- Seccomp-BPF allowlist: [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md).
 - Optional upstream mTLS: [phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md). Config signing: see [ROADMAP_P10.md](ROADMAP_P10.md).
 - HTTP/3 amplification corpus: deferred (E8).
 - Temporary bans are per-process (not shared across SeDat replicas); behind a shared LB, prefer LB-level bans for multi-instance.
