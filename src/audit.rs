@@ -214,6 +214,17 @@ impl AuditSink {
             "reason": reason,
         }));
     }
+
+    /// Admin `selftest` result summary (optional ops audit).
+    pub fn emit_admin_selftest(&self, ok: bool, failed: &[String]) {
+        self.emit(json!({
+            "event": "admin_selftest",
+            "request_id": Value::Null,
+            "peer": Value::Null,
+            "ok": ok,
+            "failed": failed,
+        }));
+    }
 }
 
 fn rfc3339_now() -> String {

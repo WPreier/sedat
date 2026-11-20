@@ -63,7 +63,7 @@ Applied **after** privilege drop. Unsupported kernels: `auto` skips; `required` 
 
 ## Admin / metrics / health
 
-- Control plane: Unix admin socket — `status`, `health`, `metrics`, `reload`, `cert` (+ `AUTH` when token configured).
+- Control plane: Unix admin socket — `status`, `health`, `metrics`, `reload`, `cert`, `selftest` (+ `AUTH` when token configured).
 - Socket ACL: owner `0600`, or `0660` when `server.admin_group` is set.
 - **Admin token (P10.4):** when `SEDAT_ADMIN_TOKEN` / `admin_token_file` / `admin_token` is set, require `AUTH <token>` (constant-time verify). Empty token = FS ACL only (document as weak for production). Failed auth audited as `admin_auth_fail`.
 - Optional `server.metrics_listen = "127.0.0.1:9090"` loopback Prometheus sidecar (`GET /metrics`) — not gated by admin token.
@@ -96,7 +96,8 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 - [x] JSONL audit sink (E5)
 - [x] Temporary IP bans after rate-limit series
 - [x] Admin capability tokens (E4)
-- [ ] Admin selftest / upstream pin / optional mTLS / ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
+- [x] Admin selftest (E6)
+- [ ] Upstream pin / optional mTLS / ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
 
 ## Reporting
 

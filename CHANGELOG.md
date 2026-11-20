@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] – 2026-11-20
+
+### Added
+
+- **P10.5 / E6 Admin selftest:** `selftest` admin command runs structured
+  health checks (config, listens, PROXY encode, limits, TLS paths, uptime);
+  optional JSONL `admin_selftest` event.
+- Phase note [docs/phases/P10_05_admin_selftest.md](docs/phases/P10_05_admin_selftest.md).
+
 ## [0.1.4] – 2026-11-20
 
 ### Added
