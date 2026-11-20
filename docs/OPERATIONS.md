@@ -74,6 +74,13 @@ docker compose -f docker-compose.dev.yml --profile acme run --rm pebble-issue
 
 See `examples/acme_staging/README.md` and [ROADMAP_P09.md](ROADMAP_P09.md).
 
+## ACME ARI (renewal scheduling)
+
+When ACME is enabled, SeDat prefers the CA’s **ARI** suggested window (RFC 9773)
+if the directory advertises `renewalInfo`. Otherwise it renews
+`renew_days_before` days before `notAfter` (default 30). Disable ARI queries with
+`acme.ari = false`. Details: [phases/P10_08_acme_ari.md](phases/P10_08_acme_ari.md).
+
 ## Admin
 
 Unix-domain socket after bind:

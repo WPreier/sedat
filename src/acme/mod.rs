@@ -1,9 +1,17 @@
 //! ACME DNS-01 certificate management via `instant-acme`.
 
+mod ari;
+mod ari_fetch;
 mod dns;
 mod http_client;
 mod renew;
 
+pub use ari::{
+    certificate_id_from_pem, directory_renewal_info_url, fallback_renew_at, not_after_from_pem,
+    parse_renewal_info_json, parse_retry_after, pick_renewal_instant, schedule_renewal,
+    sleep_until, AriInfo, AriWindow, RenewSchedule,
+};
+pub use ari_fetch::{fetch_ari_for_cert, fetch_renewal_info_base};
 pub use http_client::acme_http_client;
 
 pub use dns::{DnsProvider, FileDnsProvider};

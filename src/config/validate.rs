@@ -223,6 +223,12 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
                 ));
             }
         }
+        if cfg.acme.renew_days_before == 0 || cfg.acme.renew_days_before > 90 {
+            return Err(err(
+                find_line(source, "renew_days_before").max(find_line(source, "[acme]")),
+                "acme.renew_days_before must be 1..=90",
+            ));
+        }
         match cfg.acme.dns_provider.as_str() {
             "file" | "cloudflare" => {}
             other => {
