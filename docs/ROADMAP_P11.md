@@ -57,8 +57,9 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 
 | | |
 |--|--|
-| **Status** | pending |
+| **Status** | **done** (v0.1.15) |
 | **Behavior** | Document aligning `max_connections` with `MemoryMax` / `LimitNOFILE` |
+| **Phase note** | [phases/P11_05_limits_cgroup_sizing.md](phases/P11_05_limits_cgroup_sizing.md) |
 
 ### P11.6 – Selftest deepen
 
@@ -75,5 +76,5 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 | 2 | Request-ID early deny | **done** (v0.1.12) |
 | 3 | PROXY-reject JSONL | **done** (v0.1.13) |
 | 4 | audit_dropped metrics | **done** (v0.1.14) |
-| 5 | cgroup↔limits docs | pending |
+| 5 | cgroup↔limits docs | **done** (v0.1.15) |
 | 6 | Selftest deepen | pending |

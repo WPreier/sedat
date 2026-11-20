@@ -45,5 +45,7 @@ systemctl show sedat -p MemoryMax -p MemoryHigh -p TasksMax
 
 ## Notes
 
-- Align in-process `[limits] max_connections` with FD/memory budget.
+- Align in-process `[limits] max_connections` with FD/memory budget —
+  formulas in [P11_05_limits_cgroup_sizing.md](P11_05_limits_cgroup_sizing.md)
+  and [OPERATIONS.md](../OPERATIONS.md).
 - After drop, SeDat’s Landlock + seccomp-BPF still apply; cgroups are the outer fence.

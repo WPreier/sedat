@@ -11,7 +11,7 @@ services:
       - ./state:/app/state
       - ./examples/config/good.toml:/app/config.toml:ro
     command: ["sedat", "--config", "/app/config.toml", "--listen", "0.0.0.0:8080"]
-    # cgroup equivalents of deploy/sedat.service Memory*/TasksMax (P10.10)
+    # cgroup equivalents of deploy/sedat.service (P10.10); sized for max_connections=1024 (P11.5)
     mem_limit: 512m
     mem_reservation: 384m
     pids_limit: 4096

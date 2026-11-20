@@ -29,7 +29,7 @@ Durable list of follow-ups after **P10 complete**. Promoted work lives in
 | Admin `bans` / `unban <ip>` | List + clear temporary bans over admin socket | **done P11.1** |
 | Ban-State über Replicas teilen | Shared ban map (Redis/etc.) for multi-instance | later |
 | Sliding ban / Verlängerung bei Strike während Ban | Extend TTL if abuse continues while banned | later |
-| Doc formula: `limits.max_connections` ↔ `MemoryMax` / `LimitNOFILE` | Ops guidance aligning TOML + cgroup | P11 docs |
+| Doc formula: `limits.max_connections` ↔ `MemoryMax` / `LimitNOFILE` | Ops guidance aligning TOML + cgroup | **done P11.5** |
 | Multiple DNS providers | Trait ready; Cloudflare first | as needed |
 
 ### Audit / logging / metrics
