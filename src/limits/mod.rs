@@ -69,6 +69,15 @@ pub struct RateCheck {
     pub lifecycle: Option<BanLifecycle>,
 }
 
+/// One active temporary ban (for admin listing).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BanEntry {
+    /// Banned client address.
+    pub ip: IpAddr,
+    /// Approximate seconds remaining until TTL expiry.
+    pub remaining_secs: u64,
+}
+
 impl Limiter {
     /// Create from config.
     pub fn new(cfg: LimitsConfig) -> Arc<Self> {
@@ -181,6 +190,55 @@ impl Limiter {
         let st = entry.lock();
         st.banned_until
             .is_some_and(|until| Instant::now() < until)
+    }
+
+    /// List active temporary bans (expires stale entries while scanning).
+    #[must_use]
+    pub fn list_bans(&self) -> Vec<BanEntry> {
+        let now = Instant::now();
+        let mut out = Vec::new();
+        for entry in self.ips.iter() {
+            let mut st = entry.value().lock();
+            let Some(until) = st.banned_until else {
+                continue;
+            };
+            if now >= until {
+                st.banned_until = None;
+                st.strikes = 0;
+                continue;
+            }
+            out.push(BanEntry {
+                ip: *entry.key(),
+                remaining_secs: until.saturating_duration_since(now).as_secs().max(1),
+            });
+        }
+        out.sort_by_key(|e| e.ip);
+        out
+    }
+
+    /// Clear an active temporary ban. Returns `true` if the IP was banned.
+    ///
+    /// Also clears an already-expired ban marker; that still returns `false`
+    /// (no active ban to lift).
+    pub fn unban(&self, ip: IpAddr) -> bool {
+        let Some(entry) = self.ips.get(&ip) else {
+            return false;
+        };
+        let mut st = entry.lock();
+        let now = Instant::now();
+        match st.banned_until {
+            Some(until) if now < until => {
+                st.banned_until = None;
+                st.strikes = 0;
+                true
+            }
+            Some(_) => {
+                st.banned_until = None;
+                st.strikes = 0;
+                false
+            }
+            None => false,
+        }
     }
 
     /// Configured header byte limit.
@@ -356,6 +414,37 @@ mod tests {
             assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::RateLimited);
         }
         assert!(!lim.is_banned(ip));
+    }
+
+    #[test]
+    fn list_and_unban() {
+        let cfg = LimitsConfig {
+            rate_limit_per_ip: 1,
+            rate_limit_burst: 1,
+            ban_after_rate_limit_strikes: 2,
+            ban_duration_secs: 60,
+            ..Default::default()
+        };
+        let lim = Limiter::new(cfg.clone());
+        let ip: IpAddr = "198.51.100.7".parse().unwrap();
+        assert!(lim.list_bans().is_empty());
+        assert!(!lim.unban(ip));
+
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Allow);
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::RateLimited);
+        let banned = lim.check_rate(ip, &cfg);
+        assert_eq!(banned.outcome, RateOutcome::Banned);
+        assert!(lim.is_banned(ip));
+
+        let list = lim.list_bans();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].ip, ip);
+        assert!(list[0].remaining_secs > 0 && list[0].remaining_secs <= 60);
+
+        assert!(lim.unban(ip));
+        assert!(!lim.is_banned(ip));
+        assert!(lim.list_bans().is_empty());
+        assert!(!lim.unban(ip));
     }
 
     #[test]

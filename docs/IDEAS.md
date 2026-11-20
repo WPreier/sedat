@@ -1,56 +1,70 @@
 # SeDat – Ideas & open questions
 
-Items here are **not** blockers. Triaged in Phase 8 / P09.
+Items here are **not** blockers unless promoted into a roadmap (`ROADMAP_P*.md`).
 
-## Adopted into plan (implemented)
+## Adopted / done (P09–P10)
 
-- Admin Unix socket (not public HTTP admin) — `src/admin`
-- Threat-model doc + negative tests — `docs/THREAT_MODEL.md`, `tests/attack_hygiene.rs`
-- Pebble + Mock-DNS for ACME — Compose profile `acme` + CI `pebble-issue`
-- Mock-Seda with PROXY trust check — `deploy/mock-seda`
-- Inbound PROXY allowlist (default off) — wired in accept path
-- Metrics/health only on admin/loopback — admin `health`/`metrics` + optional sidecar
-- Config schema version + migration path — `config::migrate`, `--migrate-config`
-- Landlock / NO_NEW_PRIVS after drop — `[hardening]`, `src/hardening`
-- Admin socket group ACL — `server.admin_group` → `0660`
-- PROXY after TLS — `inbound_placement = "after_tls"`
-- Config-diff audit on reload — `config::security_diff`
-- HTTP/2 Continuations corpus — `tests/h2_attack_corpus.rs`
+See [ROADMAP_P09.md](ROADMAP_P09.md) and [ROADMAP_P10.md](ROADMAP_P10.md). Highlights:
 
-## Adopted into P10 (**complete** — see [ROADMAP_P10.md](ROADMAP_P10.md))
+- Admin Unix socket, Landlock, seccomp-BPF, PROXY after TLS, config-diff audit
+- Request-ID, JSONL audit, IP bans, admin tokens, selftest, upstream IP pin
+- Optional upstream mTLS, ACME ARI, systemd MemoryMax / Compose mem/pids
 
-- Request-ID across PROXY — **done** (`logging.request_id`, HTTP `x-request-id` after framing)
-- JSONL audit sink (E5) — **done** (`logging.audit_jsonl`)
-- Temporary IP bans after rate-limit series — **done** (`ban_after_rate_limit_strikes`)
-- Admin capability tokens (E4) — **done** (`AUTH` / `SEDAT_ADMIN_TOKEN`)
-- Admin selftest (E6) — **done** (`selftest`)
-- Upstream IP pin (E3) — **done** (`upstream_allowlist`)
-- Optional mTLS (E1) — **done** (`upstream_mtls_*`, default off)
-- ACME ARI (E2) — **done** (`acme.ari` / `renew_days_before`)
-- seccomp-BPF (E7) — **done** (`sedat-default-v1` allowlist)
-- systemd MemoryMax / cgroup limits — **done** (`deploy/sedat.service`)
-- Admin `unban` / list bans — deferred (needs Limiter admin surface)
+## Deferred / Open backlog
 
-## Open / later (see also ROADMAP_P09 extras / P10)
+Durable list of follow-ups after **P10 complete**. Promoted work lives in
+[ROADMAP_P11.md](ROADMAP_P11.md).
 
-| Idea | Notes | Triage |
-|------|-------|--------|
-| Full seccomp BPF profiles | Ship known-good profiles for `required` | P10.9 (E7) — done |
-| ARI (ACME Renewal Info) | Prefer when CA supports | P10.8 (E2) — done |
-| Multiple DNS providers | Trait ready; Cloudflare first | Extend as needed |
-| mTLS to upstream Seda | Private-net spoof defense | P10.7 (E1, optional) — done |
-| Admin capability tokens | Beyond FS ACL | **done** P10.4 (E4) |
-| Admin unban / ban list | Ops after P10.3 | Deferred |
-| JSONL audit sink | SIEM-friendly | **done** P10.2 (E5) |
-| Config signing (ed25519) | Signed active TOML only | **Skipped** (E9 no) |
-| HTTP/3 attack corpus | Mirror H2 corpus | **Skipped for P10** (E8 later) |
-| systemd MemoryMax / cgroup | Outer fence for RAM/PIDs/FDs | **done** P10.10 |
-| Doc formula: `max_connections` ↔ `MemoryMax`/`LimitNOFILE` | Ops guidance | Open |
-| Admin unban / ban list over socket | Ops after temporary bans | Deferred |
-| Hot-reload without process restart | In-process reload of routes/certs | Partial (config + certs) |
-| Windows service wrapper | Out of scope; use WSL/Docker | Won't do for prod |
-| Pingora backend option | Explicitly rejected for MVP | Won't do |
-| OCSP stapling dependency | Avoid; LE OCSP sunset | Won't do as hard req |
+### Explicitly deferred / declined
+
+| Item | Status | Notes |
+|------|--------|-------|
+| **E8 HTTP/3 attack corpus** | **later** (large) | Mirror H2 corpus for QUIC when `http3` is on |
+| **E9 Config signing (ed25519)** | **rejected** | Explicitly declined for P10; keep as “no” unless product revisits |
+
+### Ops / limits / bans
+
+| Item | Notes | Suggested |
+|------|-------|-----------|
+| Admin `bans` / `unban <ip>` | List + clear temporary bans over admin socket | **done P11.1** |
+| Ban-State über Replicas teilen | Shared ban map (Redis/etc.) for multi-instance | later |
+| Sliding ban / Verlängerung bei Strike während Ban | Extend TTL if abuse continues while banned | later |
+| Doc formula: `limits.max_connections` ↔ `MemoryMax` / `LimitNOFILE` | Ops guidance aligning TOML + cgroup | P11 docs |
+| Multiple DNS providers | Trait ready; Cloudflare first | as needed |
+
+### Audit / logging / metrics
+
+| Item | Notes | Suggested |
+|------|-------|-----------|
+| Prometheus counter for `audit_dropped` | Contended JSONL drops visible in metrics | P11 |
+| PROXY-Rejects (pre-HTTP) as JSONL event | Today often only tracing; audit for SIEM | P11 |
+| Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | later |
+
+### Admin / auth / selftest
+
+| Item | Notes | Suggested |
+|------|-------|-----------|
+| Token auch für Metrics-Sidecar | Auth on loopback `/metrics` when token set | later |
+| Token-Rotation ohne Reload | Hot-swap admin token (file watch / admin cmd) | later |
+| Selftest: Upstream-TCP + TLS-ALPN | Deeper connectivity checks | later |
+| `selftest --json` | Machine-readable selftest output | later |
+| Allowlist parseable check in selftest | Validate `upstream_allowlist` / PROXY CIDRs | later |
+
+### Proxy / upstream / request-id
+
+| Item | Notes | Suggested |
+|------|-------|-----------|
+| Upstream pin: Hostname-Literal + periodisches Re-Resolve | Pin by name + refresh DNS on interval | later |
+| Request-ID on all early deny paths | Close any remaining gaps before handler | audit P11 |
+| Hot-reload without process restart | Routes/certs partially done; broaden | partial |
+
+### Won't do (prod)
+
+| Item | Notes |
+|------|-------|
+| Windows service wrapper | Use WSL/Docker |
+| Pingora backend | Rejected for MVP |
+| OCSP stapling as hard requirement | LE OCSP sunset |
 
 ## Spec gaps resolved in Phase 0
 

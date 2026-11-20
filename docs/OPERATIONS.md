@@ -106,17 +106,20 @@ Unix-domain socket after bind:
 - With `server.admin_group = "sedat-admin"` → mode **`0660`** + group ownership.
 - **Token (P10.4):** empty `admin_token` / file / env → FS ACL only (dev-friendly). When a token is set (`SEDAT_ADMIN_TOKEN` > `admin_token_file` > `admin_token`), send `AUTH <token>` first. Failed auth → JSONL `admin_auth_fail` when audit enabled. See [phases/P10_04_admin_tokens.md](phases/P10_04_admin_tokens.md).
 - **Selftest (P10.5):** `selftest` returns PASS/FAIL lines for config, PROXY encode, limits, TLS paths, uptime; audits `admin_selftest`. See [phases/P10_05_admin_selftest.md](phases/P10_05_admin_selftest.md).
+- **Bans (P11.1):** `bans` lists active temporary IP bans; `unban <ip>` clears one (JSONL `admin_unban`). See [phases/P11_01_admin_bans.md](phases/P11_01_admin_bans.md).
 
 ```bash
-# status / health / metrics / reload / cert / selftest (Linux)
+# status / health / metrics / reload / cert / selftest / bans / unban (Linux)
 # With token:
 printf 'AUTH %s\nselftest\n' "$SEDAT_ADMIN_TOKEN" | socat - UNIX-CONNECT:/run/sedat/admin.sock
+printf 'AUTH %s\nbans\nunban 203.0.113.50\n' "$SEDAT_ADMIN_TOKEN" | socat - UNIX-CONNECT:/run/sedat/admin.sock
 # Without token (FS ACL only):
 echo status  | socat - UNIX-CONNECT:/run/sedat/admin.sock
 echo health  | socat - UNIX-CONNECT:/run/sedat/admin.sock
 echo metrics | socat - UNIX-CONNECT:/run/sedat/admin.sock
 echo reload  | socat - UNIX-CONNECT:/run/sedat/admin.sock
 echo cert    | socat - UNIX-CONNECT:/run/sedat/admin.sock
+echo bans    | socat - UNIX-CONNECT:/run/sedat/admin.sock
 echo selftest| socat - UNIX-CONNECT:/run/sedat/admin.sock
 ```
 
@@ -167,7 +170,7 @@ audit_jsonl_max_bytes = 10485760
 ```
 
 Events (one JSON object per line): `startup`, `config_reload` (security-diff), `proxy_deny`
-(with `request_id` when available), `ip_ban` / `ip_unban`. Contended writes are dropped
+(with `request_id` when available), `ip_ban` / `ip_unban`, `admin_unban`. Contended writes are dropped
 (non-blocking). See [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md).
 
 ## Upstream IP pin
@@ -214,7 +217,8 @@ ban_duration_secs = 60
 
 - While banned: **403** (fail-closed) until TTL expires.
 - Logging: `tracing` warn/info + JSONL `ip_ban` / `ip_unban` (with `request_id` when available).
-- See [phases/P10_03_ip_bans.md](phases/P10_03_ip_bans.md).
+- Admin: `bans` / `unban <ip>` (P11.1) — manual clear audits `admin_unban`.
+- See [phases/P10_03_ip_bans.md](phases/P10_03_ip_bans.md), [phases/P11_01_admin_bans.md](phases/P11_01_admin_bans.md).
 
 ## Firewall
 
@@ -224,4 +228,4 @@ ban_duration_secs = 60
 
 ## Release notes
 
-Version via Cargo/`--version`. Optional SBOM via `cargo cyclonedx` (documented in Phase 8). Checklist: [phases/P08_e2e_release.md](phases/P08_e2e_release.md). P09: [ROADMAP_P09.md](ROADMAP_P09.md). P10: [ROADMAP_P10.md](ROADMAP_P10.md).
+Version via Cargo/`--version`. Optional SBOM via `cargo cyclonedx` (documented in Phase 8). Checklist: [phases/P08_e2e_release.md](phases/P08_e2e_release.md). P09: [ROADMAP_P09.md](ROADMAP_P09.md). P10: [ROADMAP_P10.md](ROADMAP_P10.md). P11: [ROADMAP_P11.md](ROADMAP_P11.md).

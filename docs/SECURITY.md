@@ -60,7 +60,7 @@ Applied **after** privilege drop. Unsupported kernels: `auto` skips; `required` 
 ## Rate limits & hygiene
 
 - Token bucket per client IP (after TLS / inbound PROXY rewrite, before expensive proxy work).
-- **Temporary IP ban (P10.3):** after `ban_after_rate_limit_strikes` consecutive denials (default 20), ban for `ban_duration_secs` (default 60) → **403** until expiry. Set strikes to `0` to disable. Ban/unban logged + optional JSONL.
+- **Temporary IP ban (P10.3 / P11.1):** after `ban_after_rate_limit_strikes` consecutive denials (default 20), ban for `ban_duration_secs` (default 60) → **403** until expiry. Set strikes to `0` to disable. Ban/unban logged + optional JSONL; admin `bans` / `unban <ip>` for ops clear (`admin_unban`).
 - Caps: connections, request line, header count/size, body size.
 - Unknown Host: reject (default).
 

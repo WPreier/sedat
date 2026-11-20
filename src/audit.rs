@@ -204,6 +204,16 @@ impl AuditSink {
         }));
     }
 
+    /// Admin socket manually cleared a temporary IP ban (`unban <ip>`).
+    pub fn emit_admin_unban(&self, peer: &str) {
+        self.emit(json!({
+            "event": "admin_unban",
+            "request_id": Value::Null,
+            "peer": peer,
+            "source": "admin",
+        }));
+    }
+
     /// Failed admin socket authentication (token required / wrong token).
     /// Never includes the presented secret.
     pub fn emit_admin_auth_fail(&self, reason: &str) {

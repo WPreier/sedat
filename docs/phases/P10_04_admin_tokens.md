@@ -41,7 +41,7 @@ Wrong / missing token → `ERR auth failed` / `ERR auth required`.
 
 ## Out of scope (this step)
 
-- Admin `unban` / ban-list commands (idea from P10.3) — deferred
+- Admin `unban` / ban-list commands — done in **P11.1**
 - Metrics HTTP sidecar does **not** use the admin token (loopback + FS still apply)
 
 ## Tests
