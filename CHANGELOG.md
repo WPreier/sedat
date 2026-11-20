@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] – 2026-11-20
+
+### Added
+
+- **P10.6 / E3 Upstream IP pin:** optional per-route `upstream_allowlist`
+  (IPs/CIDRs). When set, DNS results and connected peer must match
+  (fail-closed 502 / audit `upstream_ip_pin`).
+- Phase note [docs/phases/P10_06_upstream_ip_pin.md](docs/phases/P10_06_upstream_ip_pin.md).
+
 ## [0.1.5] – 2026-11-20
 
 ### Added

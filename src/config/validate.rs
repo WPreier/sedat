@@ -293,6 +293,14 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
                     "upstream must be http:// (TLS to backend not supported in MVP)",
                 ));
             }
+            for cidr in &p.upstream_allowlist {
+                if parse_cidr(cidr).is_err() {
+                    return Err(err(
+                        find_line(source, cidr),
+                        format!("invalid upstream_allowlist CIDR/IP `{cidr}`"),
+                    ));
+                }
+            }
         }
     }
 

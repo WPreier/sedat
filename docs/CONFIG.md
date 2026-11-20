@@ -44,6 +44,7 @@ host = "localhost"
 [[routes.hosts.paths]]
 prefix = "/"
 upstream = "http://127.0.0.1:9080"
+# upstream_allowlist = ["127.0.0.1", "10.0.0.0/8"]  # empty = no pin
 
 [proxy_protocol]
 outbound = "v2"          # off | v1 | v2
@@ -98,6 +99,7 @@ Additional P09 / P10 rules:
 - `ban_duration_secs` must be `> 0` when `ban_after_rate_limit_strikes > 0`.
 - `server.admin_token` max 512 bytes; `admin_token_file` must be empty or a local path.
 - Admin token precedence: `SEDAT_ADMIN_TOKEN` → `admin_token_file` → `admin_token`.
+- `upstream_allowlist` entries must be valid IPs/CIDRs when set.
 
 ## Schema version & migration (fail-closed)
 

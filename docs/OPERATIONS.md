@@ -146,6 +146,20 @@ Events (one JSON object per line): `startup`, `config_reload` (security-diff), `
 (with `request_id` when available), `ip_ban` / `ip_unban`. Contended writes are dropped
 (non-blocking). See [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md).
 
+## Upstream IP pin
+
+Optional per-route allowlist (empty = unrestricted):
+
+```toml
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://backend.internal:9080"
+upstream_allowlist = ["10.0.0.5", "10.0.0.0/8"]
+```
+
+When set, SeDat only connects to resolved peers in the list (fail-closed). See
+[phases/P10_06_upstream_ip_pin.md](phases/P10_06_upstream_ip_pin.md).
+
 ## Temporary IP bans
 
 After consecutive rate-limit denials, SeDat can temporarily ban the client IP:

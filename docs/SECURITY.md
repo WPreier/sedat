@@ -20,6 +20,7 @@ Full write-up: **[THREAT_MODEL.md](THREAT_MODEL.md)** (assets, trust boundaries,
 | Slowloris / header bomb | Request timeout on connections; header count/size caps |
 | HTTP/2 CONTINUATION / HPACK bomb | hyper limits + size caps; negative corpus `tests/h2_attack_corpus.rs` |
 | Edge DoS | Token-bucket per verified client IP; connection limits; temporary IP ban after strike series |
+| Upstream DNS rebinding / SSRF-ish redirect | Optional per-route `upstream_allowlist` pin (fail-closed) |
 | Privilege / RCE blast radius | Drop after bind; **Landlock + NO_NEW_PRIVS** (`[hardening]`, Linux `auto`) |
 | Log blocking | Async bounded channel; drop+metric on overflow |
 | Cert loss on renew fail | Hot-swap; keep previous cert on ACME failure |
@@ -97,7 +98,8 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 - [x] Temporary IP bans after rate-limit series
 - [x] Admin capability tokens (E4)
 - [x] Admin selftest (E6)
-- [ ] Upstream pin / optional mTLS / ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
+- [x] Upstream IP pin (E3)
+- [ ] Optional mTLS / ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
 
 ## Reporting
 

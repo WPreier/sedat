@@ -1,4 +1,4 @@
-//! Upstream forwarding with optional PROXY header.
+//! Upstream forwarding with optional PROXY header and IP pin.
 
 use std::net::SocketAddr;
 
@@ -14,6 +14,7 @@ use crate::config::ProxyProtocolConfig;
 
 use super::proxy_protocol::{encode_proxy_v1, encode_proxy_v2, ProxyVersion};
 use super::router::RouteMatch;
+use super::upstream_pin::{filter_pinned_addrs, upstream_ip_allowed};
 
 /// Proxy forwarding error.
 #[derive(Debug, Error)]
@@ -30,6 +31,9 @@ pub enum ProxyError {
     /// Body too large.
     #[error("request body exceeds limit")]
     BodyTooLarge,
+    /// Resolved / connected upstream IP not in route allowlist (fail-closed).
+    #[error("upstream IP not allowed by pin: {0}")]
+    UpstreamNotAllowed(String),
 }
 
 /// Optional request-id injection: `(header_name, value)` set on the upstream
@@ -55,7 +59,6 @@ pub async fn proxy_request(
         .clone();
     let host = authority.host();
     let port = authority.port_u16().unwrap_or(80);
-    let upstream_addr = format!("{host}:{port}");
 
     let (parts, body) = req.into_parts();
     let collected = body
@@ -91,7 +94,7 @@ pub async fn proxy_request(
         .map_err(|e| ProxyError::Hyper(format!("{e}")))?;
 
     let version = ProxyVersion::parse(&pp.outbound);
-    let mut stream = TcpStream::connect(&upstream_addr).await?;
+    let mut stream = connect_pinned_upstream(host, port, &route.upstream_allowlist).await?;
     let local = stream.local_addr()?;
 
     match version {
@@ -151,6 +154,53 @@ pub async fn proxy_request(
     let mut resp_buf = Vec::with_capacity(4096);
     stream.read_to_end(&mut resp_buf).await?;
     parse_http_response(&resp_buf, target)
+}
+
+/// Resolve `host:port`, apply optional IP pin, connect to an allowed address.
+async fn connect_pinned_upstream(
+    host: &str,
+    port: u16,
+    allowlist: &[String],
+) -> Result<TcpStream, ProxyError> {
+    let resolved: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
+        .await
+        .map_err(ProxyError::Io)?
+        .collect();
+    if resolved.is_empty() {
+        return Err(ProxyError::UpstreamNotAllowed(format!(
+            "no addresses for {host}:{port}"
+        )));
+    }
+
+    let candidates = filter_pinned_addrs(&resolved, allowlist);
+    if candidates.is_empty() {
+        let ips: Vec<String> = resolved.iter().map(|a| a.ip().to_string()).collect();
+        return Err(ProxyError::UpstreamNotAllowed(format!(
+            "resolved [{ips}] not in allowlist {allowlist:?} for {host}:{port}",
+            ips = ips.join(", ")
+        )));
+    }
+
+    let mut last_err: Option<std::io::Error> = None;
+    for addr in candidates {
+        match TcpStream::connect(addr).await {
+            Ok(stream) => {
+                if let Ok(peer) = stream.peer_addr() {
+                    if !upstream_ip_allowed(peer.ip(), allowlist) {
+                        return Err(ProxyError::UpstreamNotAllowed(format!(
+                            "connected peer {} rejected by pin",
+                            peer.ip()
+                        )));
+                    }
+                }
+                return Ok(stream);
+            }
+            Err(e) => last_err = Some(e),
+        }
+    }
+    Err(ProxyError::Io(last_err.unwrap_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::Other, "all pinned upstream connects failed")
+    })))
 }
 
 fn parse_http_response(buf: &[u8], _target: Uri) -> Result<Response<Full<Bytes>>, ProxyError> {
