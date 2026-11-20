@@ -20,7 +20,8 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 ## Adopted into P10 (in progress — see [ROADMAP_P10.md](ROADMAP_P10.md))
 
 - Request-ID across PROXY — **done** (`logging.request_id`, HTTP `x-request-id` after framing)
-- JSONL audit sink (E5), temporary IP bans, admin tokens (E4), selftest (E6), upstream IP pin (E3), optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
+- JSONL audit sink (E5) — **done** (`logging.audit_jsonl`)
+- Temporary IP bans, admin tokens (E4), selftest (E6), upstream IP pin (E3), optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
 
 ## Open / later (see also ROADMAP_P09 extras / P10)
 
@@ -31,7 +32,7 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 | Multiple DNS providers | Trait ready; Cloudflare first | Extend as needed |
 | mTLS to upstream Seda | Private-net spoof defense | P10.7 (E1, optional) |
 | Admin capability tokens | Beyond FS ACL | P10.4 (E4) |
-| JSONL audit sink | SIEM-friendly | P10.2 (E5) |
+| JSONL audit sink | SIEM-friendly | **done** P10.2 (E5) |
 | Config signing (ed25519) | Signed active TOML only | **Skipped** (E9 no) |
 | HTTP/3 attack corpus | Mirror H2 corpus | **Skipped for P10** (E8 later) |
 | Hot-reload without process restart | In-process reload of routes/certs | Partial (config + certs) |

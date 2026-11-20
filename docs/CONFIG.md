@@ -75,6 +75,8 @@ seccomp = "auto"    # auto | off | required
 level = "info"
 request_id = true                 # generate/propagate correlation id (default)
 request_id_header = "x-request-id"  # HTTP header after PROXY framing
+audit_jsonl = ""                  # empty = disabled; e.g. "./state/audit.jsonl"
+audit_jsonl_max_bytes = 10485760  # rotate to *.jsonl.1; 0 = never
 ```
 
 ## Validation
@@ -88,6 +90,7 @@ Additional P09 / P10 rules:
 - `hardening.landlock` / `seccomp` must be `auto` | `off` | `required`.
 - Inbound PROXY still requires a non-empty allowlist when enabled.
 - `logging.request_id_header` must be a valid HTTP token (alphanumeric / `-`).
+- `logging.audit_jsonl` must be empty or a local file path (no URL schemes).
 
 ## Schema version & migration (fail-closed)
 

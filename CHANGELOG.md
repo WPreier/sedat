@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] – 2026-11-20
+
+### Added
+
+- **P10.2 / E5 JSONL audit sink:** optional `logging.audit_jsonl` append-only
+  file (default off) for `startup`, `config_reload`, and `proxy_deny` events;
+  includes `request_id` on denials when available; size-based rotate via
+  `audit_jsonl_max_bytes`.
+- Phase note [docs/phases/P10_02_jsonl_audit.md](docs/phases/P10_02_jsonl_audit.md).
+
 ## [0.1.1] – 2026-11-20
 
 ### Added

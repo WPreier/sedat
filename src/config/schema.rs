@@ -396,6 +396,15 @@ pub struct LoggingConfig {
     /// HTTP header name for the correlation id (default `x-request-id`).
     #[serde(default = "default_request_id_header")]
     pub request_id_header: String,
+    /// Append-only JSONL audit file path. Empty / unset = **disabled** (default).
+    ///
+    /// Prefer a path under `server.state_dir` (e.g. `./state/audit.jsonl`).
+    #[serde(default)]
+    pub audit_jsonl: String,
+    /// Rotate the audit file when size reaches this many bytes (`0` = never).
+    /// Rotated file is renamed to `*.jsonl.1`.
+    #[serde(default = "default_audit_max_bytes")]
+    pub audit_jsonl_max_bytes: u64,
 }
 
 fn default_log_level() -> String {
@@ -406,12 +415,18 @@ fn default_request_id_header() -> String {
     "x-request-id".into()
 }
 
+fn default_audit_max_bytes() -> u64 {
+    10_485_760
+}
+
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
             level: default_log_level(),
             request_id: true,
             request_id_header: default_request_id_header(),
+            audit_jsonl: String::new(),
+            audit_jsonl_max_bytes: default_audit_max_bytes(),
         }
     }
 }

@@ -156,6 +156,16 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
         ));
     }
 
+    if !crate::audit::valid_audit_path(&cfg.logging.audit_jsonl) {
+        return Err(err(
+            find_line(source, &cfg.logging.audit_jsonl),
+            format!(
+                "logging.audit_jsonl must be empty or a local file path, got `{}`",
+                cfg.logging.audit_jsonl
+            ),
+        ));
+    }
+
     if let Some(ref addr) = cfg.server.metrics_listen {
         if !addr.is_empty() {
             if !listen_re().is_match(addr) {

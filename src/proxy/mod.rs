@@ -32,6 +32,7 @@ use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
+use crate::audit::AuditSink;
 use crate::config::SedatConfig;
 use crate::embed;
 use crate::limits::{ConnectionGuard, Limiter};
@@ -44,17 +45,77 @@ pub struct ProxyState {
     pub config: Arc<ArcSwap<SedatConfig>>,
     /// Edge limits.
     pub limiter: Arc<Limiter>,
+    /// JSONL audit sink (may be disabled).
+    pub audit: AuditSink,
 }
 
 impl ProxyState {
-    /// Build from config.
+    /// Build from config (opens audit file when `logging.audit_jsonl` is set).
     pub fn new(config: SedatConfig) -> Self {
+        let audit = match AuditSink::from_logging(
+            &config.logging.audit_jsonl,
+            config.logging.audit_jsonl_max_bytes,
+        ) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(error = %e, "audit jsonl open failed; audit disabled");
+                AuditSink::disabled()
+            }
+        };
+        Self::with_audit(config, audit)
+    }
+
+    /// Build with an explicit audit sink (shared with admin).
+    pub fn with_audit(config: SedatConfig, audit: AuditSink) -> Self {
         let limiter = Limiter::new(config.limits.clone());
         Self {
             config: Arc::new(ArcSwap::from_pointee(config)),
             limiter,
+            audit,
         }
     }
+}
+
+fn attach_request_id(
+    mut resp: Response<BoxBody>,
+    header_name: &str,
+    rid: Option<&str>,
+) -> Response<BoxBody> {
+    if let Some(id) = rid {
+        if let (Ok(name), Ok(value)) = (
+            http::HeaderName::from_bytes(header_name.as_bytes()),
+            http::HeaderValue::from_str(id),
+        ) {
+            resp.headers_mut().insert(name, value);
+        }
+    }
+    resp
+}
+
+fn deny_response(
+    state: &ProxyState,
+    cfg: &SedatConfig,
+    peer: SocketAddr,
+    rid: Option<&str>,
+    reason: &str,
+    status: StatusCode,
+    body: &str,
+    host: Option<&str>,
+    path: Option<&str>,
+) -> Response<BoxBody> {
+    state.audit.emit_proxy_deny(
+        reason,
+        status.as_u16(),
+        &peer.to_string(),
+        rid,
+        host,
+        path,
+    );
+    attach_request_id(
+        html_response(status, body),
+        &cfg.logging.request_id_header,
+        rid,
+    )
 }
 
 type BoxBody = http_body_util::combinators::BoxBody<Bytes, Infallible>;
@@ -138,18 +199,39 @@ pub async fn handle_request(
     tls_sni: Option<String>,
 ) -> Result<Response<BoxBody>, Infallible> {
     let cfg = state.config.load_full();
+    let rid = resolve_request_id(
+        req.headers(),
+        cfg.logging.request_id,
+        &cfg.logging.request_id_header,
+    );
+    let rid_ref = rid.as_deref();
+    let path = req.uri().path().to_string();
 
     if !state.limiter.check_rate(peer.ip()) {
-        return Ok(html_response(
+        return Ok(deny_response(
+            &state,
+            &cfg,
+            peer,
+            rid_ref,
+            "rate_limit",
             StatusCode::TOO_MANY_REQUESTS,
             "<h1>429 Too Many Requests</h1>",
+            None,
+            Some(&path),
         ));
     }
 
     if has_smuggling_headers(&req) {
-        return Ok(html_response(
+        return Ok(deny_response(
+            &state,
+            &cfg,
+            peer,
+            rid_ref,
+            "smuggling",
             StatusCode::BAD_REQUEST,
             "<h1>400 Bad Request</h1><p>Transfer-Encoding and Content-Length conflict</p>",
+            None,
+            Some(&path),
         ));
     }
 
@@ -161,13 +243,18 @@ pub async fn handle_request(
     if header_bytes > state.limiter.max_header_bytes()
         || req.headers().len() > state.limiter.max_headers()
     {
-        return Ok(html_response(
+        return Ok(deny_response(
+            &state,
+            &cfg,
+            peer,
+            rid_ref,
+            "header_bomb",
             StatusCode::REQUEST_HEADER_FIELDS_TOO_LARGE,
             "<h1>431 Request Header Fields Too Large</h1>",
+            None,
+            Some(&path),
         ));
     }
-
-    let path = req.uri().path().to_string();
 
     if let Some(auth) = req.uri().authority() {
         if req.method() != Method::CONNECT {
@@ -177,23 +264,41 @@ pub async fn handle_request(
                 .and_then(|v| v.to_str().ok())
                 .unwrap_or("");
             if !host_hdr.is_empty() && !host_hdr.eq_ignore_ascii_case(auth.as_str()) {
-                return Ok(html_response(
+                return Ok(deny_response(
+                    &state,
+                    &cfg,
+                    peer,
+                    rid_ref,
+                    "absolute_uri_host_mismatch",
                     StatusCode::BAD_REQUEST,
                     "<h1>400 Bad Request</h1><p>Absolute-URI / Host mismatch</p>",
+                    Some(host_hdr),
+                    Some(&path),
                 ));
             }
         }
     }
 
     if path.contains('\\') || path_has_traversal(&path) {
-        return Ok(html_response(
+        return Ok(deny_response(
+            &state,
+            &cfg,
+            peer,
+            rid_ref,
+            "path_traversal",
             StatusCode::BAD_REQUEST,
             "<h1>400 Bad Request</h1><p>Invalid path</p>",
+            None,
+            Some(&path),
         ));
     }
 
     if let Some(resp) = embed::maybe_serve(&cfg.embedded_docs, &path) {
-        return Ok(resp);
+        return Ok(attach_request_id(
+            resp,
+            &cfg.logging.request_id_header,
+            rid_ref,
+        ));
     }
 
     let host = req
@@ -204,30 +309,49 @@ pub async fn handle_request(
         .unwrap_or_default();
 
     if host.is_empty() {
-        return Ok(html_response(
+        return Ok(deny_response(
+            &state,
+            &cfg,
+            peer,
+            rid_ref,
+            "missing_host",
             StatusCode::BAD_REQUEST,
             "<h1>400 Bad Request</h1><p>Missing Host</p>",
+            None,
+            Some(&path),
         ));
     }
 
     if let Some(ref sni) = tls_sni {
         if !sni.eq_ignore_ascii_case(&host) && host != "localhost" {
-            return Ok(html_response(
+            return Ok(deny_response(
+                &state,
+                &cfg,
+                peer,
+                rid_ref,
+                "sni_host_mismatch",
                 StatusCode::MISDIRECTED_REQUEST,
                 "<h1>421 Misdirected Request</h1><p>SNI/Host mismatch</p>",
+                Some(&host),
+                Some(&path),
             ));
         }
     }
 
     let Some(route) = resolve_route(&cfg.routes, &host, &path) else {
-        return Ok(html_response(StatusCode::NOT_FOUND, DEFAULT_404_HTML));
+        return Ok(deny_response(
+            &state,
+            &cfg,
+            peer,
+            rid_ref,
+            "unknown_host_or_path",
+            StatusCode::NOT_FOUND,
+            DEFAULT_404_HTML,
+            Some(&host),
+            Some(&path),
+        ));
     };
 
-    let rid = resolve_request_id(
-        req.headers(),
-        cfg.logging.request_id,
-        &cfg.logging.request_id_header,
-    );
     let rid_fwd = rid
         .as_deref()
         .map(|id| (cfg.logging.request_id_header.as_str(), id));
@@ -273,19 +397,22 @@ pub async fn handle_request(
             } else {
                 warn!(error = %e, "upstream proxy error");
             }
-            let mut resp = html_response(
-                StatusCode::BAD_GATEWAY,
-                &format!("<h1>502 Bad Gateway</h1><p>{e}</p>"),
+            state.audit.emit_proxy_deny(
+                "upstream_error",
+                StatusCode::BAD_GATEWAY.as_u16(),
+                &peer.to_string(),
+                rid_ref,
+                Some(&host),
+                Some(&path),
             );
-            if let Some(ref id) = rid {
-                if let (Ok(name), Ok(value)) = (
-                    http::HeaderName::from_bytes(cfg.logging.request_id_header.as_bytes()),
-                    http::HeaderValue::from_str(id),
-                ) {
-                    resp.headers_mut().insert(name, value);
-                }
-            }
-            Ok(resp)
+            Ok(attach_request_id(
+                html_response(
+                    StatusCode::BAD_GATEWAY,
+                    &format!("<h1>502 Bad Gateway</h1><p>{e}</p>"),
+                ),
+                &cfg.logging.request_id_header,
+                rid_ref,
+            ))
         }
     }
 }

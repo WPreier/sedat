@@ -58,3 +58,6 @@ seccomp = "auto"    # auto | off | required (NO_NEW_PRIVS)
 level = "info"
 request_id = true
 request_id_header = "x-request-id"
+# audit_jsonl = "./state/audit.jsonl"   # empty / unset = disabled
+audit_jsonl = ""
+audit_jsonl_max_bytes = 10485760

@@ -8,6 +8,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tracing::{info, warn};
 
 use crate::acme::AcmeStatus;
+use crate::audit::AuditSink;
 use crate::config::{self, format_audit_summary, security_diff, SedatConfig};
 use crate::limits::Limiter;
 
@@ -24,6 +25,8 @@ pub struct AdminState {
     pub limiter: Arc<Limiter>,
     /// ACME status (optional).
     pub acme_status: Option<Arc<parking_lot::Mutex<AcmeStatus>>>,
+    /// Shared JSONL audit sink.
+    pub audit: AuditSink,
 }
 
 /// Apply admin socket filesystem ACL: `0600` owner-only, or `0660` + group when configured.
@@ -174,6 +177,13 @@ async fn handle_client(conn: tokio::net::UnixStream, state: AdminState) -> std::
                             "config reload security diff"
                         );
                     }
+                    if let Err(e) = state.audit.reconfigure(
+                        &active.config.logging.audit_jsonl,
+                        active.config.logging.audit_jsonl_max_bytes,
+                    ) {
+                        warn!(error = %e, "audit jsonl reconfigure failed");
+                    }
+                    state.audit.emit_config_reload(&changes, &summary);
                     state.config.store(Arc::new(active.config));
                     format!("OK reload audit={summary}\n")
                 }
@@ -268,6 +278,7 @@ mod tests {
             config: Arc::new(ArcSwap::from_pointee(cfg)),
             limiter: Limiter::new(Default::default()),
             acme_status: None,
+            audit: AuditSink::disabled(),
         }
     }
 

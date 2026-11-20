@@ -126,6 +126,20 @@ request_id_header = "x-request-id"
 
 See [phases/P10_01_request_id.md](phases/P10_01_request_id.md) and [ROADMAP_P10.md](ROADMAP_P10.md).
 
+## JSONL audit sink
+
+Disabled by default. Enable with a path under the state directory:
+
+```toml
+[logging]
+audit_jsonl = "./state/audit.jsonl"
+audit_jsonl_max_bytes = 10485760
+```
+
+Events (one JSON object per line): `startup`, `config_reload` (security-diff), `proxy_deny`
+(with `request_id` when available). Contended writes are dropped (non-blocking).
+See [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md).
+
 ## Firewall
 
 - Allow TCP 80/443 (and UDP 443 if HTTP/3 enabled).

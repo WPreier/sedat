@@ -67,11 +67,12 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Depends on** | P10.1 (optional `request_id` field in events); P09.7 security_diff |
-| **Config** | Likely `[logging] audit_jsonl = "path"` or under `state_dir` (TBD) |
-| **Behavior** | Append-only JSONL for reload/security events (and optionally proxy denials); rotate under state |
-| **Verify** | Unit tests for line format; Docker/local: trigger reload, assert JSONL lines |
+| **Status** | **done** |
+| **Depends on** | P10.1 (`request_id` on denials); P09.7 security_diff |
+| **Config** | `[logging] audit_jsonl = ""` (default off), `audit_jsonl_max_bytes = 10485760` |
+| **Behavior** | Append-only JSONL (`startup`, `config_reload`, `proxy_deny`); `request_id` on denials when available; size rotate to `*.jsonl.1`; non-blocking drops |
+| **Verify** | `cargo test audit`; enable path and trigger 429 / reload |
+| **Phase note** | [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md) |
 
 ### P10.3 – Temporäre IP-Bans + Logging
 
@@ -165,7 +166,7 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 | Step | Item | Status |
 |------|------|--------|
 | 1 | Request-ID über PROXY | **done** |
-| 2 | E5 JSONL-Audit-Log | pending |
+| 2 | E5 JSONL-Audit-Log | **done** |
 | 3 | Temporäre IP-Bans + Logging | pending |
 | 4 | E4 Admin-Tokens | pending |
 | 5 | E6 Admin-selftest | pending |

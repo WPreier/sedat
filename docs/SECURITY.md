@@ -76,6 +76,8 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 
 **Request-ID (P10.1):** by default SeDat generates or reuses a sanitized `x-request-id`, forwards it on the upstream HTTP request **after** PROXY framing, echoes it to the client, and logs `request_id`. Invalid inbound ids are replaced (request continues). Disable with `logging.request_id = false`. Correlation uses the HTTP header, not a PROXY v2 TLV.
 
+**JSONL audit (P10.2 / E5):** optional `logging.audit_jsonl` append-only file (default **off**). Records `config_reload` diffs and `proxy_deny` events; denials include `request_id` when available. Never blocks the request path (drop on lock contention).
+
 ## Checklist (P09)
 
 - [x] Landlock / NO_NEW_PRIVS after drop (`auto`)
@@ -89,7 +91,7 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 ## Checklist (P10)
 
 - [x] Request-ID across PROXY (`x-request-id` HTTP header after framing)
-- [ ] JSONL audit sink (E5)
+- [x] JSONL audit sink (E5)
 - [ ] Temporary IP bans after rate-limit series
 - [ ] Admin tokens / selftest / upstream pin / optional mTLS / ARI / seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
 

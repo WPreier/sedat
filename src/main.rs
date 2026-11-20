@@ -10,6 +10,7 @@ use tracing::{info, warn};
 
 use sedat::acme::{self, AcmeManager, AcmePaths};
 use sedat::admin::{self, AdminState};
+use sedat::audit::AuditSink;
 use sedat::config::{self, SedatConfig};
 use sedat::hardening;
 use sedat::logging;
@@ -176,7 +177,21 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
     }
     hardening::sd_notify_ready();
 
-    let state = ProxyState::new(cfg.clone());
+    let audit = match AuditSink::from_logging(
+        &cfg.logging.audit_jsonl,
+        cfg.logging.audit_jsonl_max_bytes,
+    ) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(error = %e, "audit jsonl open failed; audit disabled");
+            AuditSink::disabled()
+        }
+    };
+    if audit.enabled() {
+        info!(path = ?audit.path(), "audit jsonl enabled");
+        audit.emit_startup(VERSION);
+    }
+    let state = ProxyState::with_audit(cfg.clone(), audit.clone());
     let acme_status = None;
 
     // Admin socket + optional loopback metrics sidecar
@@ -187,6 +202,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             config: state.config.clone(),
             limiter: state.limiter.clone(),
             acme_status,
+            audit,
         };
         let sock = PathBuf::from(&cfg.server.admin_socket);
         let admin_for_metrics = admin_state.clone();
