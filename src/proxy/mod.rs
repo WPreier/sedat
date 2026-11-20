@@ -4,6 +4,7 @@ mod forward;
 mod proxy_protocol;
 mod request_id;
 mod router;
+mod upstream_pin;
 
 pub use forward::{proxy_request, ProxyError, RequestIdFwd};
 pub use proxy_protocol::{
@@ -16,6 +17,7 @@ pub use request_id::{
     DEFAULT_REQUEST_ID_HEADER, MAX_REQUEST_ID_LEN,
 };
 pub use router::{resolve_route, RouteMatch};
+pub use upstream_pin::{filter_pinned_addrs, upstream_ip_allowed};
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -444,8 +446,12 @@ pub async fn handle_request(
             } else {
                 warn!(error = %e, "upstream proxy error");
             }
+            let reason = match &e {
+                ProxyError::UpstreamNotAllowed(_) => "upstream_ip_pin",
+                _ => "upstream_error",
+            };
             state.audit.emit_proxy_deny(
-                "upstream_error",
+                reason,
                 StatusCode::BAD_GATEWAY.as_u16(),
                 &peer.to_string(),
                 rid_ref,

@@ -206,6 +206,12 @@ pub struct PathRoute {
     pub prefix: String,
     /// Upstream base URL (`http://host:port`).
     pub upstream: String,
+    /// Optional IP/CIDR allowlist for the resolved upstream peer (empty = no pin).
+    ///
+    /// When non-empty, DNS results / connected peer must match (fail-closed).
+    /// Mitigates DNS rebinding and unexpected upstream IPs after config reload.
+    #[serde(default)]
+    pub upstream_allowlist: Vec<String>,
 }
 
 /// `[proxy_protocol]` table.

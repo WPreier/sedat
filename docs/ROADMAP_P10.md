@@ -110,11 +110,12 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending |
+| **Status** | **done** |
 | **Depends on** | Route upstream connect |
-| **Config** | Per-route allowlist of IPs/CIDRs (TBD) |
-| **Behavior** | Resolve/connect only if peer matches pin; fail-closed |
-| **Verify** | Tests: allowed IP connects; wrong IP rejected |
+| **Config** | Per-path `upstream_allowlist = ["10.0.0.0/8", …]` (empty = off) |
+| **Behavior** | Resolve → filter by pin → connect → re-check peer; fail-closed 502 |
+| **Verify** | `cargo test upstream_pin` |
+| **Phase note** | [phases/P10_06_upstream_ip_pin.md](phases/P10_06_upstream_ip_pin.md) |
 
 ### P10.7 – E1 optional mTLS Upstream
 
@@ -173,7 +174,7 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 | 3 | Temporäre IP-Bans + Logging | **done** |
 | 4 | E4 Admin-Tokens | **done** |
 | 5 | E6 Admin-selftest | **done** |
-| 6 | E3 Upstream-IP-Pin | pending |
+| 6 | E3 Upstream-IP-Pin | **done** |
 | 7 | E1 optional mTLS Upstream | pending |
 | 8 | E2 ACME ARI | pending |
 | 9 | E7 Seccomp-BPF | pending |

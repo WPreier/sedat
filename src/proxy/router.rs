@@ -11,6 +11,8 @@ pub struct RouteMatch {
     pub prefix: String,
     /// Upstream base URL.
     pub upstream: String,
+    /// Upstream IP/CIDR pin (empty = unrestricted).
+    pub upstream_allowlist: Vec<String>,
 }
 
 /// Resolve host + path to a route. Longest matching prefix wins. Unknown host → `None`.
@@ -35,6 +37,7 @@ pub fn resolve_route(routes: &RoutesConfig, host: &str, path: &str) -> Option<Ro
         host: vhost.host.clone(),
         prefix: p.prefix.clone(),
         upstream: p.upstream.clone(),
+        upstream_allowlist: p.upstream_allowlist.clone(),
     })
 }
 
@@ -52,10 +55,12 @@ mod tests {
                     PathRoute {
                         prefix: "/".into(),
                         upstream: "http://127.0.0.1:1".into(),
+                        upstream_allowlist: vec![],
                     },
                     PathRoute {
                         prefix: "/api".into(),
                         upstream: "http://127.0.0.1:2".into(),
+                        upstream_allowlist: vec![],
                     },
                 ],
             }],

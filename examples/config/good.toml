@@ -25,6 +25,7 @@ host = "localhost"
 [[routes.hosts.paths]]
 prefix = "/"
 upstream = "http://127.0.0.1:9080"
+# upstream_allowlist = ["127.0.0.1", "10.0.0.0/8"]
 
 [proxy_protocol]
 outbound = "v2"

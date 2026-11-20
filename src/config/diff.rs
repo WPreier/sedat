@@ -248,7 +248,12 @@ fn route_summary(cfg: &SedatConfig) -> String {
     let mut parts = Vec::new();
     for h in &cfg.routes.hosts {
         for p in &h.paths {
-            parts.push(format!("{}{}→{}", h.host, p.prefix, p.upstream));
+            let pin = if p.upstream_allowlist.is_empty() {
+                String::new()
+            } else {
+                format!("[{}]", p.upstream_allowlist.join(","))
+            };
+            parts.push(format!("{}{}→{}{}", h.host, p.prefix, p.upstream, pin));
         }
     }
     parts.sort();
