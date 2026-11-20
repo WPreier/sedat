@@ -5,6 +5,17 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] – 2026-11-20
+
+### Added
+
+- **P11.1 Admin bans / unban:** admin socket commands `bans` (list active
+  temporary bans with remaining TTL) and `unban <ip>` (clear one ban);
+  token-auth aware; JSONL `admin_unban` on success. Phase note
+  [docs/phases/P11_01_admin_bans.md](docs/phases/P11_01_admin_bans.md).
+- Open backlog written to [docs/IDEAS.md](docs/IDEAS.md); roadmap
+  [docs/ROADMAP_P11.md](docs/ROADMAP_P11.md).
+
 ## [0.1.10] – 2026-11-20
 
 ### Added

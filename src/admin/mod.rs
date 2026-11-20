@@ -209,26 +209,31 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
         };
     }
 
-    let cmd = line.trim().to_ascii_lowercase();
-    if matches!(cmd.as_str(), "quit" | "exit") {
+    let trimmed = line.trim();
+    let (verb, args) = match trimmed.split_once(char::is_whitespace) {
+        Some((v, rest)) => (v.to_ascii_lowercase(), rest.trim()),
+        None => (trimmed.to_ascii_lowercase(), ""),
+    };
+
+    if matches!(verb.as_str(), "quit" | "exit") {
         return ("OK bye\n".into(), true);
     }
-    if cmd == "help" {
+    if verb == "help" {
         let help = if token_required {
-            "commands: AUTH <token> | status | health | metrics | reload | cert | selftest | quit\n"
+            "commands: AUTH <token> | status | health | metrics | reload | cert | selftest | bans | unban <ip> | quit\n"
         } else {
-            "commands: status | health | metrics | reload | cert | selftest | quit\n"
+            "commands: status | health | metrics | reload | cert | selftest | bans | unban <ip> | quit\n"
         };
         return (help.into(), false);
     }
 
     if token_required && !*authed {
-        warn!(target: "sedat::audit", command = %cmd, "admin command rejected (auth required)");
+        warn!(target: "sedat::audit", command = %verb, "admin command rejected (auth required)");
         state.audit.emit_admin_auth_fail("required");
         return ("ERR auth required (send AUTH <token> first)\n".into(), false);
     }
 
-    let reply = match cmd.as_str() {
+    let reply = match verb.as_str() {
         "status" | "stats" => format_status(state),
         "health" | "ready" => "OK healthy\n".to_string(),
         "metrics" => {
@@ -277,9 +282,36 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
             }
             report.format_reply()
         }
+        "bans" | "ban-list" | "ban_list" => format_bans(state),
+        "unban" => admin_unban(state, args),
         other => format!("ERR unknown command: {other}\n"),
     };
     (reply, false)
+}
+
+fn format_bans(state: &AdminState) -> String {
+    let bans = state.limiter.list_bans();
+    let mut out = format!("OK bans n={}\n", bans.len());
+    for b in bans {
+        out.push_str(&format!("{} remaining_secs={}\n", b.ip, b.remaining_secs));
+    }
+    out
+}
+
+fn admin_unban(state: &AdminState, args: &str) -> String {
+    if args.is_empty() {
+        return "ERR unban: usage unban <ip>\n".into();
+    }
+    let Ok(ip) = args.parse::<std::net::IpAddr>() else {
+        return format!("ERR unban: invalid ip `{args}`\n");
+    };
+    if state.limiter.unban(ip) {
+        info!(target: "sedat::audit", peer = %ip, "admin unban");
+        state.audit.emit_admin_unban(&ip.to_string());
+        format!("OK unban {ip}\n")
+    } else {
+        format!("ERR unban: not banned `{ip}`\n")
+    }
 }
 
 fn format_status(state: &AdminState) -> String {
@@ -456,6 +488,87 @@ mod tests {
         let text = std::fs::read_to_string(&audit_path).unwrap();
         assert!(text.contains("\"event\":\"admin_selftest\""));
         assert!(text.contains("\"ok\":true"));
+    }
+
+    #[test]
+    fn bans_and_unban_commands() {
+        use crate::config::LimitsConfig;
+        use crate::limits::RateOutcome;
+        use std::net::IpAddr;
+
+        let dir = tempfile::tempdir().unwrap();
+        let audit_path = dir.path().join("audit.jsonl");
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+
+        let limits = LimitsConfig {
+            rate_limit_per_ip: 1,
+            rate_limit_burst: 1,
+            ban_after_rate_limit_strikes: 2,
+            ban_duration_secs: 120,
+            ..Default::default()
+        };
+        let lim = Limiter::new(limits.clone());
+        let ip: IpAddr = "203.0.113.50".parse().unwrap();
+        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Allow);
+        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::RateLimited);
+        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Banned);
+
+        let mut cfg = SedatConfig {
+            schema_version: 1,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: limits.clone(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.admin_token = "ban-token".into();
+        let mut state = sample_state_with(cfg, audit);
+        state.limiter = lim;
+
+        let mut authed = false;
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "bans");
+        assert!(r.starts_with("ERR auth required"), "{r}");
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "AUTH ban-token");
+        assert_eq!(r, "OK auth\n");
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "bans");
+        assert!(r.starts_with("OK bans n=1\n"), "{r}");
+        assert!(r.contains("203.0.113.50 remaining_secs="), "{r}");
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "unban");
+        assert!(r.starts_with("ERR unban: usage"), "{r}");
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "unban not-an-ip");
+        assert!(r.starts_with("ERR unban: invalid ip"), "{r}");
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "unban 203.0.113.50");
+        assert_eq!(r, "OK unban 203.0.113.50\n");
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "bans");
+        assert_eq!(r, "OK bans n=0\n");
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "unban 203.0.113.50");
+        assert!(r.starts_with("ERR unban: not banned"), "{r}");
+
+        let text = std::fs::read_to_string(&audit_path).unwrap();
+        assert!(text.contains("\"event\":\"admin_unban\""));
+        assert!(text.contains("203.0.113.50"));
+        assert!(text.contains("\"source\":\"admin\""));
+    }
+
+    #[test]
+    fn help_lists_bans_unban() {
+        let state = sample_state();
+        let mut authed = false;
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "help");
+        assert!(r.contains("bans"), "{r}");
+        assert!(r.contains("unban <ip>"), "{r}");
     }
 
     #[test]
