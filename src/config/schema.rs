@@ -204,7 +204,10 @@ pub struct HostRoute {
 pub struct PathRoute {
     /// Path prefix beginning with `/`.
     pub prefix: String,
-    /// Upstream base URL (`http://host:port`).
+    /// Upstream base URL (`http://host:port` or `https://host:port`).
+    ///
+    /// Default / recommended for Seda: plaintext `http://` on a private net.
+    /// `https://` enables TLS to the upstream; pair with mTLS paths below when needed.
     pub upstream: String,
     /// Optional IP/CIDR allowlist for the resolved upstream peer (empty = no pin).
     ///
@@ -212,6 +215,30 @@ pub struct PathRoute {
     /// Mitigates DNS rebinding and unexpected upstream IPs after config reload.
     #[serde(default)]
     pub upstream_allowlist: Vec<String>,
+    /// Optional client certificate PEM for upstream mTLS (empty = off).
+    /// Requires `upstream_mtls_key` and an `https://` upstream.
+    #[serde(default)]
+    pub upstream_mtls_cert: String,
+    /// Optional client private key PEM for upstream mTLS.
+    #[serde(default)]
+    pub upstream_mtls_key: String,
+    /// Optional CA PEM to verify the upstream server certificate.
+    /// Empty with `https://` → public webpki roots (not for private CAs).
+    #[serde(default)]
+    pub upstream_mtls_ca: String,
+}
+
+impl Default for PathRoute {
+    fn default() -> Self {
+        Self {
+            prefix: "/".into(),
+            upstream: "http://127.0.0.1:1".into(),
+            upstream_allowlist: vec![],
+            upstream_mtls_cert: String::new(),
+            upstream_mtls_key: String::new(),
+            upstream_mtls_ca: String::new(),
+        }
+    }
 }
 
 /// `[proxy_protocol]` table.

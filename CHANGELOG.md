@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] – 2026-11-20
+
+### Added
+
+- **P10.7 / E1 optional upstream mTLS:** `https://` upstreams with optional
+  `upstream_mtls_cert` / `upstream_mtls_key` / `upstream_mtls_ca` (all default
+  empty / off). Plaintext `http://` remains the recommended default for Seda.
+  Outbound PROXY is skipped on HTTPS (TLS ClientHello first).
+- Phase note [docs/phases/P10_07_upstream_mtls.md](docs/phases/P10_07_upstream_mtls.md).
+
 ## [0.1.6] – 2026-11-20
 
 ### Added

@@ -13,6 +13,12 @@ pub struct RouteMatch {
     pub upstream: String,
     /// Upstream IP/CIDR pin (empty = unrestricted).
     pub upstream_allowlist: Vec<String>,
+    /// Optional client cert PEM for upstream mTLS (empty = off).
+    pub upstream_mtls_cert: String,
+    /// Optional client key PEM for upstream mTLS.
+    pub upstream_mtls_key: String,
+    /// Optional CA PEM to verify upstream TLS (empty = webpki roots).
+    pub upstream_mtls_ca: String,
 }
 
 /// Resolve host + path to a route. Longest matching prefix wins. Unknown host → `None`.
@@ -38,6 +44,9 @@ pub fn resolve_route(routes: &RoutesConfig, host: &str, path: &str) -> Option<Ro
         prefix: p.prefix.clone(),
         upstream: p.upstream.clone(),
         upstream_allowlist: p.upstream_allowlist.clone(),
+        upstream_mtls_cert: p.upstream_mtls_cert.clone(),
+        upstream_mtls_key: p.upstream_mtls_key.clone(),
+        upstream_mtls_ca: p.upstream_mtls_ca.clone(),
     })
 }
 
@@ -55,12 +64,12 @@ mod tests {
                     PathRoute {
                         prefix: "/".into(),
                         upstream: "http://127.0.0.1:1".into(),
-                        upstream_allowlist: vec![],
+                        ..Default::default()
                     },
                     PathRoute {
                         prefix: "/api".into(),
                         upstream: "http://127.0.0.1:2".into(),
-                        upstream_allowlist: vec![],
+                        ..Default::default()
                     },
                 ],
             }],

@@ -51,6 +51,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 | T13 | Sustained per-IP flood after burst | Temporary IP ban after consecutive rate-limit strikes (`403` until TTL) | `tests/ip_ban.rs`, `src/limits` |
 | T14 | Admin socket abuse after ACL bypass | Optional `AUTH` token (constant-time); failed auth audited | `src/admin` |
 | T15 | Upstream DNS rebinding / unexpected peer | Optional `upstream_allowlist` pin; fail-closed connect | `tests/upstream_pin.rs` |
+| T16 | Spoofed / unauthenticated upstream | Optional HTTPS + mTLS (`upstream_mtls_*`, default off) | `tests/upstream_mtls.rs` |
 
 ## PROXY Protocol policy (detail)
 
@@ -77,6 +78,6 @@ See [CONFIG.md](CONFIG.md) and `sedat --migrate-config`. Unknown `schema_version
 ## Residual risks / non-goals
 
 - Full seccomp BPF syscall allowlists: proposed (ROADMAP_P09 E7); today NO_NEW_PRIVS + Landlock.
-- mTLS to upstream, config signing, admin tokens: see [ROADMAP_P10.md](ROADMAP_P10.md).
+- Optional upstream mTLS: [phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md). Config signing: see [ROADMAP_P10.md](ROADMAP_P10.md).
 - HTTP/3 amplification corpus: deferred (E8).
 - Temporary bans are per-process (not shared across SeDat replicas); behind a shared LB, prefer LB-level bans for multi-instance.

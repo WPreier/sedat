@@ -1,4 +1,4 @@
-//! Upstream forwarding with optional PROXY header and IP pin.
+//! Upstream forwarding with optional PROXY header, IP pin, and HTTPS/mTLS.
 
 use std::net::SocketAddr;
 
@@ -6,14 +6,17 @@ use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
 use hyper::{Request, Response, Uri};
+use rustls::pki_types::ServerName;
 use thiserror::Error;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpStream;
+use tokio_rustls::TlsConnector;
 
 use crate::config::ProxyProtocolConfig;
 
 use super::proxy_protocol::{encode_proxy_v1, encode_proxy_v2, ProxyVersion};
 use super::router::RouteMatch;
+use super::upstream_mtls::{build_upstream_client_config, UpstreamTlsPaths};
 use super::upstream_pin::{filter_pinned_addrs, upstream_ip_allowed};
 
 /// Proxy forwarding error.
@@ -34,6 +37,9 @@ pub enum ProxyError {
     /// Resolved / connected upstream IP not in route allowlist (fail-closed).
     #[error("upstream IP not allowed by pin: {0}")]
     UpstreamNotAllowed(String),
+    /// Upstream TLS / mTLS setup or handshake failed.
+    #[error("upstream TLS: {0}")]
+    Tls(String),
 }
 
 /// Optional request-id injection: `(header_name, value)` set on the upstream
@@ -53,12 +59,16 @@ pub async fn proxy_request(
         .upstream
         .parse()
         .map_err(|_| ProxyError::BadUpstream(route.upstream.clone()))?;
+    let scheme = upstream_base.scheme_str().unwrap_or("http");
+    let use_tls = scheme.eq_ignore_ascii_case("https");
     let authority = upstream_base
         .authority()
         .ok_or_else(|| ProxyError::BadUpstream(route.upstream.clone()))?
         .clone();
     let host = authority.host();
-    let port = authority.port_u16().unwrap_or(80);
+    let port = authority
+        .port_u16()
+        .unwrap_or(if use_tls { 443 } else { 80 });
 
     let (parts, body) = req.into_parts();
     let collected = body
@@ -89,28 +99,91 @@ pub async fn proxy_request(
         }
     };
 
-    let target: Uri = format!("http://{authority}{forward_path}")
+    let target: Uri = format!("{scheme}://{authority}{forward_path}")
         .parse()
         .map_err(|e| ProxyError::Hyper(format!("{e}")))?;
 
     let version = ProxyVersion::parse(&pp.outbound);
     let mut stream = connect_pinned_upstream(host, port, &route.upstream_allowlist).await?;
-    let local = stream.local_addr()?;
 
-    match version {
-        ProxyVersion::Off => {}
-        ProxyVersion::V1 => {
-            let hdr = encode_proxy_v1(client_addr, local);
-            stream.write_all(&hdr).await?;
+    // Plain HTTP upstream: optional PROXY framing, then HTTP.
+    // HTTPS / mTLS: ClientHello must be first on the wire — skip outbound PROXY
+    // (set outbound=off for clarity; non-off is ignored here with a debug log).
+    if use_tls {
+        if !matches!(version, ProxyVersion::Off) {
+            tracing::debug!(
+                outbound = %pp.outbound,
+                "skipping outbound PROXY for https upstream (TLS handshake first)"
+            );
         }
-        ProxyVersion::V2 => {
-            let hdr = encode_proxy_v2(client_addr, local);
-            stream.write_all(&hdr).await?;
+    } else {
+        let local = stream.local_addr()?;
+        match version {
+            ProxyVersion::Off => {}
+            ProxyVersion::V1 => {
+                let hdr = encode_proxy_v1(client_addr, local);
+                stream.write_all(&hdr).await?;
+            }
+            ProxyVersion::V2 => {
+                let hdr = encode_proxy_v2(client_addr, local);
+                stream.write_all(&hdr).await?;
+            }
         }
     }
 
+    if use_tls {
+        let client_cfg = build_upstream_client_config(&UpstreamTlsPaths {
+            cert: &route.upstream_mtls_cert,
+            key: &route.upstream_mtls_key,
+            ca: &route.upstream_mtls_ca,
+        })
+        .map_err(|e| ProxyError::Tls(e.to_string()))?;
+        let connector = TlsConnector::from(client_cfg);
+        let server_name = ServerName::try_from(host.to_string())
+            .map_err(|e| ProxyError::Tls(format!("invalid SNI host `{host}`: {e}")))?;
+        let mut tls = connector
+            .connect(server_name, stream)
+            .await
+            .map_err(|e| ProxyError::Tls(e.to_string()))?;
+        exchange_http(
+            &mut tls,
+            &parts,
+            &forward_path,
+            &authority,
+            &bytes,
+            request_id,
+            target,
+        )
+        .await
+    } else {
+        exchange_http(
+            &mut stream,
+            &parts,
+            &forward_path,
+            &authority,
+            &bytes,
+            request_id,
+            target,
+        )
+        .await
+    }
+}
+
+async fn exchange_http<S>(
+    stream: &mut S,
+    parts: &http::request::Parts,
+    forward_path: &str,
+    authority: &http::uri::Authority,
+    bytes: &Bytes,
+    request_id: RequestIdFwd<'_>,
+    target: Uri,
+) -> Result<Response<Full<Bytes>>, ProxyError>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     // Manual HTTP/1.1 request write to keep PROXY on same TCP stream.
     // Request-id is an HTTP header after PROXY framing (not a PROXY TLV).
+    // For HTTPS, PROXY (if any) is written before the TLS handshake.
     let method = parts.method.as_str();
     let mut out = format!("{method} {forward_path} HTTP/1.1\r\n");
     out.push_str(&format!("Host: {authority}\r\n"));
@@ -146,11 +219,9 @@ pub async fn proxy_request(
     out.push_str(&format!("Content-Length: {}\r\n\r\n", bytes.len()));
     stream.write_all(out.as_bytes()).await?;
     if !bytes.is_empty() {
-        stream.write_all(&bytes).await?;
+        stream.write_all(bytes).await?;
     }
 
-    // Read raw response
-    use tokio::io::AsyncReadExt;
     let mut resp_buf = Vec::with_capacity(4096);
     stream.read_to_end(&mut resp_buf).await?;
     parse_http_response(&resp_buf, target)

@@ -37,7 +37,7 @@ fn h2_cfg(listen_hint: &str) -> (SedatConfig, TlsState) {
                 paths: vec![PathRoute {
                     prefix: "/".into(),
                     upstream: "http://127.0.0.1:9".into(),
-                    upstream_allowlist: vec![],
+                    ..Default::default()
                 }],
             }],
         },

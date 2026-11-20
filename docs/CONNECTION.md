@@ -31,6 +31,7 @@ Seda (HTTP, Seiten aus Memory)
 - **Inbound PROXY** auf SeDat: Standard **aus**; nur mit expliziter CIDR-Allowlist aktivieren.
 - Seda darf nicht aus dem Internet erreichbar sein.
 - **Request-ID:** SeDat setzt standardmäßig `x-request-id` als **HTTP-Header nach** dem PROXY-Framing (kein PROXY-TLV). Seda/Mock-Seda können den Header für Logs korrelieren; ungültige Client-Werte werden ersetzt.
+- **Upstream HTTPS / mTLS (optional):** Standard bleibt `http://`. Bei `https://` spricht SeDat TLS zum Upstream (optional Client-Zertifikat via `upstream_mtls_*`). Outbound-PROXY wird auf HTTPS-Upstreams übersprungen (ClientHello zuerst). Details: [phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md).
 
 ## Trust-Boundary-Tests
 
