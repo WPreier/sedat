@@ -104,7 +104,7 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 - [x] Upstream IP pin (E3)
 - [x] Optional upstream mTLS (P10.7) — default off; see [phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md)
 - [x] ACME ARI (P10.8) — prefer CA windows, expiry fallback; see [phases/P10_08_acme_ari.md](phases/P10_08_acme_ari.md)
-- [ ] systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
+- [x] systemd / cgroup MemoryMax (P10.10) — see [phases/P10_10_systemd_memory.md](phases/P10_10_systemd_memory.md)
 
 ## Reporting
 

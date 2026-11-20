@@ -17,7 +17,7 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 - Config-diff audit on reload — `config::security_diff`
 - HTTP/2 Continuations corpus — `tests/h2_attack_corpus.rs`
 
-## Adopted into P10 (in progress — see [ROADMAP_P10.md](ROADMAP_P10.md))
+## Adopted into P10 (**complete** — see [ROADMAP_P10.md](ROADMAP_P10.md))
 
 - Request-ID across PROXY — **done** (`logging.request_id`, HTTP `x-request-id` after framing)
 - JSONL audit sink (E5) — **done** (`logging.audit_jsonl`)
@@ -28,7 +28,7 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 - Optional mTLS (E1) — **done** (`upstream_mtls_*`, default off)
 - ACME ARI (E2) — **done** (`acme.ari` / `renew_days_before`)
 - seccomp-BPF (E7) — **done** (`sedat-default-v1` allowlist)
-- systemd MemoryMax — **pending**
+- systemd MemoryMax / cgroup limits — **done** (`deploy/sedat.service`)
 - Admin `unban` / list bans — deferred (needs Limiter admin surface)
 
 ## Open / later (see also ROADMAP_P09 extras / P10)
@@ -44,6 +44,9 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 | JSONL audit sink | SIEM-friendly | **done** P10.2 (E5) |
 | Config signing (ed25519) | Signed active TOML only | **Skipped** (E9 no) |
 | HTTP/3 attack corpus | Mirror H2 corpus | **Skipped for P10** (E8 later) |
+| systemd MemoryMax / cgroup | Outer fence for RAM/PIDs/FDs | **done** P10.10 |
+| Doc formula: `max_connections` ↔ `MemoryMax`/`LimitNOFILE` | Ops guidance | Open |
+| Admin unban / ban list over socket | Ops after temporary bans | Deferred |
 | Hot-reload without process restart | In-process reload of routes/certs | Partial (config + certs) |
 | Windows service wrapper | Out of scope; use WSL/Docker | Won't do for prod |
 | Pingora backend option | Explicitly rejected for MVP | Won't do |

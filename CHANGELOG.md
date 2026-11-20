@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] – 2026-11-20
+
+### Added
+
+- **P10.10 systemd / cgroup limits:** `deploy/sedat.service` sets `MemoryHigh`,
+  `MemoryMax`, `TasksMax`, `LimitNOFILE`, `CPUQuota` plus extra Protect*
+  knobs; Compose proxy profile mirrors memory/pids. Phase note
+  [docs/phases/P10_10_systemd_memory.md](docs/phases/P10_10_systemd_memory.md).
+- **P10 complete** (E8 deferred, E9 skipped) — see [docs/ROADMAP_P10.md](docs/ROADMAP_P10.md).
+
 ## [0.1.9] – 2026-11-20
 
 ### Added

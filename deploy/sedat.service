@@ -1,5 +1,6 @@
 [Unit]
 Description=SeDat reverse proxy
+Documentation=https://github.com/WPreier/sedat
 After=network-online.target
 Wants=network-online.target
 
@@ -14,13 +15,32 @@ User=root
 WatchdogSec=30
 Restart=on-failure
 RestartSec=2
+
+# --- Sandbox / privilege ---
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
 ReadWritePaths=/var/lib/sedat
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_SETUID CAP_SETGID
+
+# --- cgroup resource limits (P10.10) ---
+# Soft throttle before hard OOM-kill; tune for host size.
+MemoryHigh=384M
+MemoryMax=512M
+# Cap threads/tasks (Tokio workers + accepts); raise if needed.
+TasksMax=4096
+# Connection-heavy proxy: generous but finite FD budget.
+LimitNOFILE=65535
+# Avoid runaway CPU on a busy host (optional soft quota).
+CPUQuota=200%
+# Prefer killing this service under host memory pressure before critical units.
+OOMScoreAdjust=200
 
 [Install]
 WantedBy=multi-user.target
