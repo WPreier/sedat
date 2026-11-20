@@ -143,10 +143,12 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 
 | | |
 |--|--|
-| **Status** | pending |
+| **Status** | **done** |
 | **Depends on** | P09.1 hardening scaffolding |
-| **Behavior** | Ship/generate known-good BPF profiles for `required` |
-| **Verify** | Linux Docker: `seccomp=required` starts; forbidden syscall blocked in test harness |
+| **Config** | `[hardening] seccomp = auto\|off\|required` (unchanged knobs; real BPF now) |
+| **Behavior** | Built-in allowlist BPF (`sedat-default-v1`); `auto` falls back to NO_NEW_PRIVS |
+| **Verify** | `cargo test hardening::` in Linux Docker (mount → EPERM in child) |
+| **Phase note** | [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md) |
 
 ### P10.10 – systemd Memory/cgroup Limits
 
@@ -180,7 +182,7 @@ Suggested order matches the above (1→10). Deviate only if a later discovery fo
 | 6 | E3 Upstream-IP-Pin | **done** |
 | 7 | E1 optional mTLS Upstream | **done** |
 | 8 | E2 ACME ARI | **done** |
-| 9 | E7 Seccomp-BPF | pending |
+| 9 | E7 Seccomp-BPF | **done** |
 | 10 | systemd Memory/cgroup Limits | pending |
 
 ## Doc & test deliverables

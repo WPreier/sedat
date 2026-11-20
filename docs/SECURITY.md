@@ -3,7 +3,7 @@
 ## Principles
 
 - **Fail-closed:** invalid config / untrusted PROXY / unknown Host → reject.
-- **Least privilege:** bind then drop; optional Landlock / NO_NEW_PRIVS after drop (Linux).
+- **Least privilege:** bind then drop; optional Landlock / seccomp-BPF after drop (Linux).
 - **Explicit trust:** PROXY and admin paths require allowlists / socket ACLs.
 - **Memory-safe TLS:** rustls only; TLS 1.2 and 1.3 (prefer 1.3).
 
@@ -22,7 +22,7 @@ Full write-up: **[THREAT_MODEL.md](THREAT_MODEL.md)** (assets, trust boundaries,
 | Edge DoS | Token-bucket per verified client IP; connection limits; temporary IP ban after strike series |
 | Upstream DNS rebinding / SSRF-ish redirect | Optional per-route `upstream_allowlist` pin (fail-closed) |
 | Spoofed / unauthenticated upstream peer | Optional HTTPS + mTLS client cert (`upstream_mtls_*`, default off) |
-| Privilege / RCE blast radius | Drop after bind; **Landlock + NO_NEW_PRIVS** (`[hardening]`, Linux `auto`) |
+| Privilege / RCE blast radius | Drop after bind; **Landlock + seccomp-BPF** (`[hardening]`, Linux `auto`) |
 | Log blocking | Async bounded channel; drop+metric on overflow |
 | Cert loss on renew fail | Hot-swap; keep previous cert on ACME failure |
 | Mass-renewal stampedes | Optional ACME ARI windows (RFC 9773); expiry fallback |
@@ -52,7 +52,7 @@ Automated negative tests: `tests/attack_hygiene.rs`, `tests/h2_attack_corpus.rs`
 ```toml
 [hardening]
 landlock = "auto"   # auto | off | required
-seccomp = "auto"    # auto | off | required  (NO_NEW_PRIVS; full BPF profile optional later)
+seccomp = "auto"    # auto | off | required  (BPF allowlist; auto→NO_NEW_PRIVS fallback)
 ```
 
 Applied **after** privilege drop. Unsupported kernels: `auto` skips; `required` fails closed.
@@ -85,7 +85,8 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 
 ## Checklist (P09)
 
-- [x] Landlock / NO_NEW_PRIVS after drop (`auto`)
+- [x] Landlock after drop (`auto`)
+- [x] Seccomp-BPF allowlist (P10.9) — see [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md)
 - [x] Prometheus via admin + optional loopback sidecar
 - [x] Pebble CI issuance (`pebble-issue` workflow / compose)
 - [x] HTTP/2 Continuations corpus
@@ -103,7 +104,7 @@ Reload audit target: `sedat::audit` (trust-boundary key diffs).
 - [x] Upstream IP pin (E3)
 - [x] Optional upstream mTLS (P10.7) — default off; see [phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md)
 - [x] ACME ARI (P10.8) — prefer CA windows, expiry fallback; see [phases/P10_08_acme_ari.md](phases/P10_08_acme_ari.md)
-- [ ] Optional seccomp-BPF / systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
+- [ ] systemd MemoryMax — see [ROADMAP_P10.md](ROADMAP_P10.md)
 
 ## Reporting
 

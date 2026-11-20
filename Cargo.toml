@@ -1,6 +1,6 @@
 [package]
 name = "sedat"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 rust-version = "1.75"
 description = "Minimal, high-security reverse proxy (companion to Seda)"
@@ -75,6 +75,10 @@ h3-quinn = { version = "0.0.7", optional = true }
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", default-features = false, features = ["user", "fs", "process"] }
 libc = "0.2"
+
+# Seccomp-BPF allowlist (P10.9); little-endian Linux only (seccompiler limitation).
+[target.'cfg(all(target_os = "linux", target_endian = "little"))'.dependencies]
+seccompiler = "0.5"
 
 [dev-dependencies]
 tempfile = "3.15"

@@ -59,7 +59,7 @@ h3 = false
 
 [hardening]
 landlock = "auto"   # auto | off | required (Linux)
-seccomp = "auto"    # auto | off | required (NO_NEW_PRIVS)
+seccomp = "auto"    # auto | off | required (BPF allowlist; auto→NO_NEW_PRIVS fallback)
 
 [logging]
 level = "info"

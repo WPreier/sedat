@@ -1,5 +1,8 @@
 //! Privilege drop and process hardening (Linux-primary).
 
+#[cfg(all(target_os = "linux", target_endian = "little"))]
+mod seccomp;
+
 use std::path::Path;
 
 use tracing::info;
@@ -286,18 +289,41 @@ fn apply_seccomp(mode: &str) -> std::io::Result<String> {
     if mode == "off" {
         return Ok("off".into());
     }
-    // Minimal filter: set NO_NEW_PRIVS (idempotent) and leave syscall filtering to
-    // Landlock + Docker/systemd. A full BPF filter is optional (`required` still
-    // succeeds if NO_NEW_PRIVS works — reduces RCE privilege escalation).
-    match try_no_new_privs() {
-        Ok(()) => Ok("no_new_privs".into()),
-        Err(e) if mode == "auto" => {
-            info!(error = %e, "seccomp/no_new_privs unavailable; continuing (auto)");
-            Ok(format!("skipped:{e}"))
+
+    #[cfg(all(target_os = "linux", target_endian = "little"))]
+    {
+        match seccomp::apply_default_bpf() {
+            Ok(()) => Ok(format!("bpf:{}", seccomp::PROFILE_NAME)),
+            Err(e) if mode == "auto" => {
+                // Soft fallback: NO_NEW_PRIVS only (pre-P10.9 behaviour).
+                info!(error = %e, "seccomp BPF unavailable; falling back to NO_NEW_PRIVS (auto)");
+                match try_no_new_privs() {
+                    Ok(()) => Ok(format!("no_new_privs_fallback:{e}")),
+                    Err(e2) => {
+                        info!(error = %e2, "NO_NEW_PRIVS also failed; continuing (auto)");
+                        Ok(format!("skipped:{e};{e2}"))
+                    }
+                }
+            }
+            Err(e) => Err(std::io::Error::other(format!(
+                "seccomp BPF required but failed: {e}"
+            ))),
         }
-        Err(e) => Err(std::io::Error::other(format!(
-            "seccomp required but failed: {e}"
-        ))),
+    }
+
+    #[cfg(all(target_os = "linux", not(target_endian = "little")))]
+    {
+        // seccompiler is little-endian only.
+        match try_no_new_privs() {
+            Ok(()) if mode == "auto" => Ok("no_new_privs_be_unsupported".into()),
+            Ok(()) => Err(std::io::Error::other(
+                "seccomp BPF required but host endianness unsupported",
+            )),
+            Err(e) if mode == "auto" => Ok(format!("skipped:{e}")),
+            Err(e) => Err(std::io::Error::other(format!(
+                "seccomp required but failed: {e}"
+            ))),
+        }
     }
 }
 

@@ -80,7 +80,7 @@ h3 = false
 
 [hardening]
 landlock = "auto"   # auto | off | required
-seccomp = "auto"    # auto | off | required
+seccomp = "auto"    # auto | off | required (BPF allowlist; auto falls back to NO_NEW_PRIVS)
 
 [logging]
 level = "info"
@@ -99,6 +99,7 @@ Additional P09 / P10 rules:
 - `metrics_listen` must be loopback (`127.0.0.1` / `::1` / `localhost`) when set.
 - `inbound_placement` must be `before_tls` or `after_tls`.
 - `hardening.landlock` / `seccomp` must be `auto` | `off` | `required`.
+  Seccomp installs the built-in BPF profile on Linux; see [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md).
 - Inbound PROXY still requires a non-empty allowlist when enabled.
 - `logging.request_id_header` must be a valid HTTP token (alphanumeric / `-`).
 - `logging.audit_jsonl` must be empty or a local file path (no URL schemes).
