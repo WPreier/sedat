@@ -203,7 +203,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             limiter: state.limiter.clone(),
             acme_status,
             audit,
-            started_at: std::time::Instant::now(),
+            started_at: admin::now_start(),
         };
         let sock = PathBuf::from(&cfg.server.admin_socket);
         let admin_for_metrics = admin_state.clone();
