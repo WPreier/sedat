@@ -6,6 +6,8 @@ listen_tls = "127.0.0.1:8443"
 http_redirect_listen = "127.0.0.1:8081"
 state_dir = "./state"
 admin_socket = "./state/admin.sock"
+admin_token = ""
+admin_token_file = ""
 
 [tls]
 enabled = false

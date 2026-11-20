@@ -22,7 +22,9 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 - Request-ID across PROXY — **done** (`logging.request_id`, HTTP `x-request-id` after framing)
 - JSONL audit sink (E5) — **done** (`logging.audit_jsonl`)
 - Temporary IP bans after rate-limit series — **done** (`ban_after_rate_limit_strikes`)
-- Admin tokens (E4), selftest (E6), upstream IP pin (E3), optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
+- Admin capability tokens (E4) — **done** (`AUTH` / `SEDAT_ADMIN_TOKEN`)
+- Admin selftest (E6), upstream IP pin (E3), optional mTLS (E1), ACME ARI (E2), seccomp-BPF (E7), systemd MemoryMax — **pending**
+- Admin `unban` / list bans — deferred (needs Limiter admin surface)
 
 ## Open / later (see also ROADMAP_P09 extras / P10)
 
@@ -32,7 +34,8 @@ Items here are **not** blockers. Triaged in Phase 8 / P09.
 | ARI (ACME Renewal Info) | Prefer when CA supports | P10.8 (E2) |
 | Multiple DNS providers | Trait ready; Cloudflare first | Extend as needed |
 | mTLS to upstream Seda | Private-net spoof defense | P10.7 (E1, optional) |
-| Admin capability tokens | Beyond FS ACL | P10.4 (E4) |
+| Admin capability tokens | Beyond FS ACL | **done** P10.4 (E4) |
+| Admin unban / ban list | Ops after P10.3 | Deferred |
 | JSONL audit sink | SIEM-friendly | **done** P10.2 (E5) |
 | Config signing (ed25519) | Signed active TOML only | **Skipped** (E9 no) |
 | HTTP/3 attack corpus | Mirror H2 corpus | **Skipped for P10** (E8 later) |

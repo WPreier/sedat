@@ -203,6 +203,17 @@ impl AuditSink {
             "request_id": request_id,
         }));
     }
+
+    /// Failed admin socket authentication (token required / wrong token).
+    /// Never includes the presented secret.
+    pub fn emit_admin_auth_fail(&self, reason: &str) {
+        self.emit(json!({
+            "event": "admin_auth_fail",
+            "request_id": Value::Null,
+            "peer": Value::Null,
+            "reason": reason,
+        }));
+    }
 }
 
 fn rfc3339_now() -> String {

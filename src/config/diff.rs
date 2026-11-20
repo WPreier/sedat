@@ -65,6 +65,19 @@ pub fn security_diff(old: &SedatConfig, new: &SedatConfig) -> Vec<SecurityChange
         old.server.admin_group.as_deref(),
         new.server.admin_group.as_deref(),
     );
+    // Do not log raw token values — only whether a token is configured.
+    push(
+        &mut out,
+        "server.admin_token_set",
+        &(!old.server.admin_token.trim().is_empty()).to_string(),
+        &(!new.server.admin_token.trim().is_empty()).to_string(),
+    );
+    push(
+        &mut out,
+        "server.admin_token_file",
+        &old.server.admin_token_file,
+        &new.server.admin_token_file,
+    );
     push_opt(
         &mut out,
         "server.metrics_listen",

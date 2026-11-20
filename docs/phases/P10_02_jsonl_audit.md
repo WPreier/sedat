@@ -26,6 +26,7 @@ Common fields: `ts` (RFC3339), `v`, `event`, `request_id` (string or null), `pee
 | `config_reload` | Admin `reload` success | `summary`, `changes[]`; `request_id` null |
 | `proxy_deny` | Edge rejection / upstream error | `reason`, `status`, `host`, `path`; **`request_id` when available** |
 | `ip_ban` / `ip_unban` | Temporary ban lifecycle (P10.3) | `duration_secs` / `strikes` on ban; **`request_id` when available** |
+| `admin_auth_fail` | Admin token rejected / missing (P10.4) | `reason` only — never the secret |
 
 `proxy_deny` reasons include: `rate_limit`, `smuggling`, `header_bomb`,
 `absolute_uri_host_mismatch`, `path_traversal`, `missing_host`,

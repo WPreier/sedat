@@ -166,6 +166,22 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
         ));
     }
 
+    if !crate::audit::valid_audit_path(&cfg.server.admin_token_file) {
+        return Err(err(
+            find_line(source, &cfg.server.admin_token_file),
+            format!(
+                "server.admin_token_file must be empty or a local file path, got `{}`",
+                cfg.server.admin_token_file
+            ),
+        ));
+    }
+    if cfg.server.admin_token.len() > 512 {
+        return Err(err(
+            find_line(source, "admin_token"),
+            "server.admin_token must be at most 512 bytes",
+        ));
+    }
+
     if let Some(ref addr) = cfg.server.metrics_listen {
         if !addr.is_empty() {
             if !listen_re().is_match(addr) {

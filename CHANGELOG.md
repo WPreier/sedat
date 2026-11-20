@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] – 2026-11-20
+
+### Added
+
+- **P10.4 / E4 Admin tokens:** optional `AUTH <token>` on the admin Unix socket
+  (`SEDAT_ADMIN_TOKEN` > `admin_token_file` > `admin_token`). Empty = FS ACL
+  only. Constant-time verify; failed auth → JSONL `admin_auth_fail`.
+- Phase note [docs/phases/P10_04_admin_tokens.md](docs/phases/P10_04_admin_tokens.md).
+
 ## [0.1.3] – 2026-11-20
 
 ### Added

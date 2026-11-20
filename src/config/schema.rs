@@ -66,6 +66,17 @@ pub struct ServerConfig {
     /// Optional Unix group for admin socket ACL (`0660` when set; otherwise `0600`).
     #[serde(default)]
     pub admin_group: Option<String>,
+    /// Optional admin capability token (empty = **no** token required; FS ACL only).
+    ///
+    /// When non-empty (or provided via `admin_token_file` / `SEDAT_ADMIN_TOKEN`),
+    /// clients must send `AUTH <token>` before other admin commands.
+    /// Prefer env/file over committing secrets into TOML.
+    #[serde(default)]
+    pub admin_token: String,
+    /// Optional path to a file containing the admin token (trimmed). Overrides
+    /// `admin_token` when the file is non-empty. Env `SEDAT_ADMIN_TOKEN` wins over both.
+    #[serde(default)]
+    pub admin_token_file: String,
     /// Optional loopback-only Prometheus HTTP scrape address (e.g. `127.0.0.1:9090`).
     /// Empty / unset disables the sidecar. Non-loopback addresses fail validation.
     #[serde(default)]
@@ -99,6 +110,8 @@ impl Default for ServerConfig {
             state_dir: default_state_dir(),
             admin_socket: default_admin_socket(),
             admin_group: None,
+            admin_token: String::new(),
+            admin_token_file: String::new(),
             metrics_listen: None,
         }
     }

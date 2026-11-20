@@ -23,6 +23,8 @@ group = "sedat"
 state_dir = "./state"
 admin_socket = "./state/admin.sock"  # Unix only
 # admin_group = "sedat-admin"        # optional → socket 0660 + group
+# admin_token = ""                   # empty = FS ACL only; prefer env/file in prod
+# admin_token_file = "./state/admin.token"
 # metrics_listen = "127.0.0.1:9090"  # optional loopback Prometheus sidecar
 
 [tls]
@@ -94,6 +96,8 @@ Additional P09 / P10 rules:
 - `logging.request_id_header` must be a valid HTTP token (alphanumeric / `-`).
 - `logging.audit_jsonl` must be empty or a local file path (no URL schemes).
 - `ban_duration_secs` must be `> 0` when `ban_after_rate_limit_strikes > 0`.
+- `server.admin_token` max 512 bytes; `admin_token_file` must be empty or a local path.
+- Admin token precedence: `SEDAT_ADMIN_TOKEN` → `admin_token_file` → `admin_token`.
 
 ## Schema version & migration (fail-closed)
 

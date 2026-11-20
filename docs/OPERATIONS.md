@@ -80,9 +80,13 @@ Unix-domain socket after bind:
 
 - Default mode **`0600`** (owner only).
 - With `server.admin_group = "sedat-admin"` → mode **`0660`** + group ownership.
+- **Token (P10.4):** empty `admin_token` / file / env → FS ACL only (dev-friendly). When a token is set (`SEDAT_ADMIN_TOKEN` > `admin_token_file` > `admin_token`), send `AUTH <token>` first. Failed auth → JSONL `admin_auth_fail` when audit enabled. See [phases/P10_04_admin_tokens.md](phases/P10_04_admin_tokens.md).
 
 ```bash
 # status / health / metrics / reload / cert (Linux)
+# With token:
+printf 'AUTH %s\nstatus\n' "$SEDAT_ADMIN_TOKEN" | socat - UNIX-CONNECT:/run/sedat/admin.sock
+# Without token (FS ACL only):
 echo status  | socat - UNIX-CONNECT:/run/sedat/admin.sock
 echo health  | socat - UNIX-CONNECT:/run/sedat/admin.sock
 echo metrics | socat - UNIX-CONNECT:/run/sedat/admin.sock
