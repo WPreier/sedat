@@ -7,26 +7,25 @@ use http_body_util::{BodyExt, Full};
 use hyper::{Response, StatusCode};
 
 use crate::config::EmbeddedDocsConfig;
+use crate::proxy::{BoxError, ForwardBody};
 
 const SEDAT_DOC: &str = include_str!("../../assets/docs/sedat.md");
 const SEDA_DOC: &str = include_str!("../../assets/docs/seda.md");
 
-type BoxBody = http_body_util::combinators::BoxBody<Bytes, Infallible>;
-
-fn md_response(body: &str) -> Response<BoxBody> {
+fn md_response(body: &str) -> Response<ForwardBody> {
     Response::builder()
         .status(StatusCode::OK)
         .header(hyper::header::CONTENT_TYPE, "text/markdown; charset=utf-8")
         .body(
             Full::new(Bytes::from(body.to_owned()))
-                .map_err(|n: Infallible| match n {})
+                .map_err(|n: Infallible| -> BoxError { match n {} })
                 .boxed(),
         )
         .expect("response")
 }
 
 /// Serve embedded docs if the path matches and docs are enabled.
-pub fn maybe_serve(cfg: &EmbeddedDocsConfig, path: &str) -> Option<Response<BoxBody>> {
+pub fn maybe_serve(cfg: &EmbeddedDocsConfig, path: &str) -> Option<Response<ForwardBody>> {
     if !cfg.enabled {
         return None;
     }

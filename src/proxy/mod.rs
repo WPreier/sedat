@@ -7,7 +7,7 @@ mod router;
 mod upstream_mtls;
 mod upstream_pin;
 
-pub use forward::{proxy_request, ProxyError, RequestIdFwd};
+pub use forward::{proxy_request, BoxError, ForwardBody, ProxyError, RequestIdFwd};
 pub use proxy_protocol::{
     accept_with_inbound_proxy, accept_with_inbound_proxy_placement, apply_inbound_after_tls,
     encode_proxy_v1, encode_proxy_v2, inbound_on_plaintext, inbound_on_tls, inbound_proxy_trusted,
@@ -185,11 +185,11 @@ fn deny_response(
     )
 }
 
-type BoxBody = http_body_util::combinators::BoxBody<Bytes, Infallible>;
+type BoxBody = ForwardBody;
 
 fn full_body(data: impl Into<Bytes>) -> BoxBody {
     Full::new(data.into())
-        .map_err(|never: Infallible| match never {})
+        .map_err(|never: Infallible| -> BoxError { match never {} })
         .boxed()
 }
 
@@ -520,10 +520,7 @@ where
                 );
             }
             // Pass through without re-buffering so H3 (and others) can stream frames.
-            Ok(Response::from_parts(
-                parts,
-                body.map_err(|never: Infallible| match never {}).boxed(),
-            ))
+            Ok(Response::from_parts(parts, body))
         }
         Err(e) => {
             if let Some(ref id) = rid {
@@ -531,23 +528,26 @@ where
             } else {
                 warn!(error = %e, "upstream proxy error");
             }
-            let reason = match &e {
-                ProxyError::UpstreamNotAllowed(_) => "upstream_ip_pin",
-                _ => "upstream_error",
+            let (status, reason) = match &e {
+                ProxyError::BodyTooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "body_too_large"),
+                ProxyError::UpstreamNotAllowed(_) => (StatusCode::BAD_GATEWAY, "upstream_ip_pin"),
+                _ => (StatusCode::BAD_GATEWAY, "upstream_error"),
             };
             state.audit.emit_proxy_deny(
                 reason,
-                StatusCode::BAD_GATEWAY.as_u16(),
+                status.as_u16(),
                 &peer.to_string(),
                 rid_ref,
                 Some(&host),
                 Some(&path),
             );
+            let title = if status == StatusCode::PAYLOAD_TOO_LARGE {
+                "413 Payload Too Large"
+            } else {
+                "502 Bad Gateway"
+            };
             Ok(attach_request_id(
-                html_response(
-                    StatusCode::BAD_GATEWAY,
-                    &format!("<h1>502 Bad Gateway</h1><p>{e}</p>"),
-                ),
+                html_response(status, &format!("<h1>{title}</h1><p>{e}</p>")),
                 &cfg.logging.request_id_header,
                 rid_ref,
             ))

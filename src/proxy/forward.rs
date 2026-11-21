@@ -1,11 +1,16 @@
 //! Upstream forwarding with optional PROXY header, IP pin, and HTTPS/mTLS.
+//!
+//! Request bodies are written with HTTP/1.1 chunked transfer (no full-buffer).
+//! Response bodies are streamed via a channel under `max_body_bytes` (fail-closed).
 
 use std::net::SocketAddr;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
-use bytes::Bytes;
-use http_body_util::{BodyExt, Full};
-use hyper::body::Body;
+use bytes::{Bytes, BytesMut};
+use http_body_util::BodyExt;
+use hyper::body::{Body, Frame};
 use hyper::{Request, Response, Uri};
 use rustls::pki_types::ServerName;
 use thiserror::Error;
@@ -21,6 +26,11 @@ use super::upstream_mtls::{build_upstream_client_config, UpstreamTlsPaths};
 use super::upstream_pin::{
     expand_allowlist, filter_pinned_addrs_expanded, ip_allowed_by_pin, DnsCache, ExpandedPin,
 };
+
+/// Boxed body error used across proxy responses.
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
+/// Streaming / full response body type.
+pub type ForwardBody = http_body_util::combinators::BoxBody<Bytes, BoxError>;
 
 /// Proxy forwarding error.
 #[derive(Debug, Error)]
@@ -49,6 +59,32 @@ pub enum ProxyError {
 /// HTTP request **after** any PROXY framing.
 pub type RequestIdFwd<'a> = Option<(&'a str, &'a str)>;
 
+/// Hyper body fed by upstream response DATA chunks.
+struct UpstreamChanBody {
+    rx: tokio::sync::mpsc::Receiver<Result<Bytes, std::io::Error>>,
+}
+
+impl Body for UpstreamChanBody {
+    type Data = Bytes;
+    type Error = std::io::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        match self.rx.poll_recv(cx) {
+            Poll::Ready(Some(Ok(buf))) => Poll::Ready(Some(Ok(Frame::data(buf)))),
+            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+fn box_upstream_body(body: UpstreamChanBody) -> ForwardBody {
+    body.map_err(|e| -> BoxError { Box::new(e) }).boxed()
+}
+
 /// Forward `req` to the matched upstream.
 pub async fn proxy_request<B>(
     req: Request<B>,
@@ -58,9 +94,9 @@ pub async fn proxy_request<B>(
     max_body: usize,
     request_id: RequestIdFwd<'_>,
     dns_cache: &DnsCache,
-) -> Result<Response<Full<Bytes>>, ProxyError>
+) -> Result<Response<ForwardBody>, ProxyError>
 where
-    B: Body + Send,
+    B: Body + Send + 'static,
     B::Data: Send,
     B::Error: std::error::Error + Send + Sync + 'static,
 {
@@ -80,14 +116,6 @@ where
         .unwrap_or(if use_tls { 443 } else { 80 });
 
     let (parts, body) = req.into_parts();
-    let collected = body
-        .collect()
-        .await
-        .map_err(|e| ProxyError::Hyper(e.to_string()))?;
-    let bytes = collected.to_bytes();
-    if bytes.len() > max_body {
-        return Err(ProxyError::BodyTooLarge);
-    }
 
     // Rebuild path: strip matched prefix unless prefix is `/`.
     let orig_path = parts
@@ -108,13 +136,9 @@ where
         }
     };
 
-    let target: Uri = format!("{scheme}://{authority}{forward_path}")
-        .parse()
-        .map_err(|e| ProxyError::Hyper(format!("{e}")))?;
-
     let version = ProxyVersion::parse(&pp.outbound);
     let refresh = Duration::from_secs(route.upstream_dns_refresh_secs);
-    let mut stream =
+    let stream =
         connect_pinned_upstream(host, port, &route.upstream_allowlist, dns_cache, refresh).await?;
 
     // Plain HTTP upstream: optional PROXY framing, then HTTP.
@@ -127,7 +151,31 @@ where
                 "skipping outbound PROXY for https upstream (TLS handshake first)"
             );
         }
+        let client_cfg = build_upstream_client_config(&UpstreamTlsPaths {
+            cert: &route.upstream_mtls_cert,
+            key: &route.upstream_mtls_key,
+            ca: &route.upstream_mtls_ca,
+        })
+        .map_err(|e| ProxyError::Tls(e.to_string()))?;
+        let connector = TlsConnector::from(client_cfg);
+        let server_name = ServerName::try_from(host.to_string())
+            .map_err(|e| ProxyError::Tls(format!("invalid SNI host `{host}`: {e}")))?;
+        let tls = connector
+            .connect(server_name, stream)
+            .await
+            .map_err(|e| ProxyError::Tls(e.to_string()))?;
+        exchange_http(
+            tls,
+            &parts,
+            &forward_path,
+            &authority,
+            body,
+            max_body,
+            request_id,
+        )
+        .await
     } else {
+        let mut stream = stream;
         let local = stream.local_addr()?;
         match version {
             ProxyVersion::Off => {}
@@ -140,70 +188,44 @@ where
                 stream.write_all(&hdr).await?;
             }
         }
-    }
-
-    if use_tls {
-        let client_cfg = build_upstream_client_config(&UpstreamTlsPaths {
-            cert: &route.upstream_mtls_cert,
-            key: &route.upstream_mtls_key,
-            ca: &route.upstream_mtls_ca,
-        })
-        .map_err(|e| ProxyError::Tls(e.to_string()))?;
-        let connector = TlsConnector::from(client_cfg);
-        let server_name = ServerName::try_from(host.to_string())
-            .map_err(|e| ProxyError::Tls(format!("invalid SNI host `{host}`: {e}")))?;
-        let mut tls = connector
-            .connect(server_name, stream)
-            .await
-            .map_err(|e| ProxyError::Tls(e.to_string()))?;
         exchange_http(
-            &mut tls,
+            stream,
             &parts,
             &forward_path,
             &authority,
-            &bytes,
+            body,
+            max_body,
             request_id,
-            target,
-        )
-        .await
-    } else {
-        exchange_http(
-            &mut stream,
-            &parts,
-            &forward_path,
-            &authority,
-            &bytes,
-            request_id,
-            target,
         )
         .await
     }
 }
 
-async fn exchange_http<S>(
+async fn write_chunked_request<S, B>(
     stream: &mut S,
     parts: &http::request::Parts,
     forward_path: &str,
     authority: &http::uri::Authority,
-    bytes: &Bytes,
+    body: B,
+    max_body: usize,
     request_id: RequestIdFwd<'_>,
-    target: Uri,
-) -> Result<Response<Full<Bytes>>, ProxyError>
+) -> Result<(), ProxyError>
 where
-    S: AsyncRead + AsyncWrite + Unpin,
+    S: AsyncWrite + Unpin,
+    B: Body,
+    B::Error: std::error::Error,
 {
-    // Manual HTTP/1.1 request write to keep PROXY on same TCP stream.
-    // Request-id is an HTTP header after PROXY framing (not a PROXY TLV).
-    // For HTTPS, PROXY (if any) is written before the TLS handshake.
     let method = parts.method.as_str();
     let mut out = format!("{method} {forward_path} HTTP/1.1\r\n");
     out.push_str(&format!("Host: {authority}\r\n"));
     out.push_str("Connection: close\r\n");
+    out.push_str("Transfer-Encoding: chunked\r\n");
     for (name, value) in parts.headers.iter() {
         let n = name.as_str();
         if n.eq_ignore_ascii_case("host")
             || n.eq_ignore_ascii_case("connection")
             || n.eq_ignore_ascii_case("transfer-encoding")
+            || n.eq_ignore_ascii_case("content-length")
             || n.eq_ignore_ascii_case("proxy-connection")
         {
             continue;
@@ -227,15 +249,223 @@ where
         out.push_str(id);
         out.push_str("\r\n");
     }
-    out.push_str(&format!("Content-Length: {}\r\n\r\n", bytes.len()));
+    out.push_str("\r\n");
     stream.write_all(out.as_bytes()).await?;
-    if !bytes.is_empty() {
-        stream.write_all(bytes).await?;
+
+    let mut seen = 0usize;
+    let mut body = std::pin::pin!(body);
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = frame.map_err(|e| ProxyError::Hyper(e.to_string()))?;
+        if let Ok(mut data) = frame.into_data() {
+            use bytes::Buf;
+            let n = data.remaining();
+            if n == 0 {
+                continue;
+            }
+            if seen.saturating_add(n) > max_body {
+                return Err(ProxyError::BodyTooLarge);
+            }
+            seen += n;
+            let chunk = data.copy_to_bytes(n);
+            let header = format!("{n:x}\r\n");
+            stream.write_all(header.as_bytes()).await?;
+            stream.write_all(&chunk).await?;
+            stream.write_all(b"\r\n").await?;
+        }
+    }
+    stream.write_all(b"0\r\n\r\n").await?;
+    Ok(())
+}
+
+/// Read until `\r\n\r\n`; returns (header_bytes_without_terminator, leftover_body).
+async fn read_response_head<S: AsyncRead + Unpin>(
+    stream: &mut S,
+    max_header_bytes: usize,
+) -> Result<(Vec<u8>, Bytes), ProxyError> {
+    let mut buf = BytesMut::with_capacity(512);
+    let mut tmp = [0u8; 512];
+    loop {
+        let n = stream.read(&mut tmp).await?;
+        if n == 0 {
+            return Err(ProxyError::Hyper("incomplete upstream response".into()));
+        }
+        buf.extend_from_slice(&tmp[..n]);
+        if buf.len() > max_header_bytes {
+            return Err(ProxyError::Hyper(
+                "upstream response headers too large".into(),
+            ));
+        }
+        if let Some(pos) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            let header = buf[..pos].to_vec();
+            let leftover = buf.split_off(pos + 4).freeze();
+            return Ok((header, leftover));
+        }
+    }
+}
+
+fn parse_status_and_headers(
+    header_bytes: &[u8],
+) -> Result<(u16, http::HeaderMap, Option<usize>), ProxyError> {
+    let header_str =
+        std::str::from_utf8(header_bytes).map_err(|e| ProxyError::Hyper(e.to_string()))?;
+    let mut lines = header_str.split("\r\n");
+    let status_line = lines
+        .next()
+        .ok_or_else(|| ProxyError::Hyper("missing status".into()))?;
+    let mut parts = status_line.split_whitespace();
+    let _version = parts.next();
+    let code: u16 = parts
+        .next()
+        .ok_or_else(|| ProxyError::Hyper("missing status code".into()))?
+        .parse()
+        .map_err(|e| ProxyError::Hyper(format!("{e}")))?;
+
+    let mut headers = http::HeaderMap::new();
+    let mut content_length = None;
+    for line in lines {
+        if let Some((k, v)) = line.split_once(':') {
+            let k = k.trim();
+            let v = v.trim();
+            if k.eq_ignore_ascii_case("transfer-encoding") || k.eq_ignore_ascii_case("connection") {
+                continue;
+            }
+            if k.eq_ignore_ascii_case("content-length") {
+                content_length = v.parse().ok();
+            }
+            if let (Ok(name), Ok(value)) = (
+                http::HeaderName::from_bytes(k.as_bytes()),
+                http::HeaderValue::from_str(v),
+            ) {
+                headers.append(name, value);
+            }
+        }
+    }
+    Ok((code, headers, content_length))
+}
+
+async fn pump_response_body<S: AsyncRead + Unpin + Send + 'static>(
+    mut stream: S,
+    leftover: Bytes,
+    content_length: Option<usize>,
+    max_body: usize,
+    tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+) {
+    let mut seen = 0usize;
+
+    if !leftover.is_empty() {
+        if leftover.len() > max_body {
+            let _ = tx
+                .send(Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "response body exceeds limit",
+                )))
+                .await;
+            return;
+        }
+        if let Some(cl) = content_length {
+            if leftover.len() > cl {
+                let _ = tx
+                    .send(Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "response longer than Content-Length",
+                    )))
+                    .await;
+                return;
+            }
+        }
+        seen = leftover.len();
+        if tx.send(Ok(leftover)).await.is_err() {
+            return;
+        }
     }
 
-    let mut resp_buf = Vec::with_capacity(4096);
-    stream.read_to_end(&mut resp_buf).await?;
-    parse_http_response(&resp_buf, target)
+    let mut tmp = [0u8; 16 * 1024];
+    loop {
+        if let Some(cl) = content_length {
+            if seen >= cl {
+                break;
+            }
+        }
+        let want = match content_length {
+            Some(cl) => (cl - seen).min(tmp.len()),
+            None => tmp.len(),
+        };
+        let n = match stream.read(&mut tmp[..want]).await {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) => {
+                let _ = tx.send(Err(e)).await;
+                return;
+            }
+        };
+        if seen.saturating_add(n) > max_body {
+            let _ = tx
+                .send(Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "response body exceeds limit",
+                )))
+                .await;
+            return;
+        }
+        seen += n;
+        if tx
+            .send(Ok(Bytes::copy_from_slice(&tmp[..n])))
+            .await
+            .is_err()
+        {
+            return;
+        }
+    }
+}
+
+async fn exchange_http<S, B>(
+    mut stream: S,
+    parts: &http::request::Parts,
+    forward_path: &str,
+    authority: &http::uri::Authority,
+    body: B,
+    max_body: usize,
+    request_id: RequestIdFwd<'_>,
+) -> Result<Response<ForwardBody>, ProxyError>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    B: Body + Send + 'static,
+    B::Data: Send,
+    B::Error: std::error::Error + Send + Sync + 'static,
+{
+    write_chunked_request(
+        &mut stream,
+        parts,
+        forward_path,
+        authority,
+        body,
+        max_body,
+        request_id,
+    )
+    .await?;
+
+    // Cap header block similarly to request header limits (16 KiB default).
+    let (header_bytes, leftover) = read_response_head(&mut stream, 16_384).await?;
+    let (code, headers, content_length) = parse_status_and_headers(&header_bytes)?;
+
+    if let Some(cl) = content_length {
+        if cl > max_body {
+            return Err(ProxyError::BodyTooLarge);
+        }
+    }
+
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(8);
+    tokio::spawn(async move {
+        pump_response_body(stream, leftover, content_length, max_body, tx).await;
+    });
+
+    let mut builder = Response::builder().status(code);
+    for (k, v) in headers.iter() {
+        builder = builder.header(k, v);
+    }
+    builder
+        .body(box_upstream_body(UpstreamChanBody { rx }))
+        .map_err(|e| ProxyError::Hyper(e.to_string()))
 }
 
 /// Resolve `host:port` (cached), apply optional IP/hostname pin, connect.
@@ -298,38 +528,89 @@ async fn connect_pinned_upstream(
     })))
 }
 
-fn parse_http_response(buf: &[u8], _target: Uri) -> Result<Response<Full<Bytes>>, ProxyError> {
-    let header_end = buf
-        .windows(4)
-        .position(|w| w == b"\r\n\r\n")
-        .ok_or_else(|| ProxyError::Hyper("incomplete upstream response".into()))?;
-    let header_bytes = &buf[..header_end];
-    let body = Bytes::copy_from_slice(&buf[header_end + 4..]);
-    let header_str =
-        std::str::from_utf8(header_bytes).map_err(|e| ProxyError::Hyper(e.to_string()))?;
-    let mut lines = header_str.split("\r\n");
-    let status_line = lines
-        .next()
-        .ok_or_else(|| ProxyError::Hyper("missing status".into()))?;
-    let mut parts = status_line.split_whitespace();
-    let _version = parts.next();
-    let code: u16 = parts
-        .next()
-        .ok_or_else(|| ProxyError::Hyper("missing status code".into()))?
-        .parse()
-        .map_err(|e| ProxyError::Hyper(format!("{e}")))?;
-    let mut builder = Response::builder().status(code);
-    for line in lines {
-        if let Some((k, v)) = line.split_once(':') {
-            let k = k.trim();
-            let v = v.trim();
-            if k.eq_ignore_ascii_case("transfer-encoding") || k.eq_ignore_ascii_case("connection") {
-                continue;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use http_body_util::Full;
+    use tokio::io::DuplexStream;
+
+    #[tokio::test]
+    async fn chunked_request_and_streamed_response() {
+        let (client, mut server) = tokio::io::duplex(64 * 1024);
+        tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 1024];
+            // Read request until end chunk.
+            loop {
+                let n = server.read(&mut tmp).await.unwrap();
+                if n == 0 {
+                    break;
+                }
+                buf.extend_from_slice(&tmp[..n]);
+                if buf.windows(5).any(|w| w == b"0\r\n\r\n") {
+                    break;
+                }
             }
-            builder = builder.header(k, v);
-        }
+            assert!(
+                std::str::from_utf8(&buf)
+                    .unwrap()
+                    .contains("Transfer-Encoding: chunked"),
+                "request should be chunked"
+            );
+            assert!(
+                buf.windows(9).any(|w| w == b"stream-me")
+                    || buf.windows(9).any(|w| w == b"9\r\nstre")
+            );
+            let resp = b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\npong";
+            server.write_all(resp).await.unwrap();
+        });
+
+        let parts = Request::builder()
+            .method("POST")
+            .uri("http://example/x")
+            .body(())
+            .unwrap()
+            .into_parts()
+            .0;
+        let body = Full::new(Bytes::from_static(b"stream-me"));
+        let resp = exchange_http(
+            client,
+            &parts,
+            "/x",
+            &"example".parse().unwrap(),
+            body,
+            1024,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(resp.status(), 200);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&bytes[..], b"pong");
     }
-    builder
-        .body(Full::new(body))
-        .map_err(|e| ProxyError::Hyper(e.to_string()))
+
+    #[tokio::test]
+    async fn oversize_request_body_fail_closed() {
+        let (client, _server): (DuplexStream, DuplexStream) = tokio::io::duplex(1024);
+        let parts = Request::builder()
+            .method("POST")
+            .uri("http://example/x")
+            .body(())
+            .unwrap()
+            .into_parts()
+            .0;
+        let body = Full::new(Bytes::from(vec![b'x'; 64]));
+        let err = exchange_http(
+            client,
+            &parts,
+            "/x",
+            &"example".parse().unwrap(),
+            body,
+            16,
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, ProxyError::BodyTooLarge));
+    }
 }

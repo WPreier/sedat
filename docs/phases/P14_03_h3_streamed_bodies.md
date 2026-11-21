@@ -12,9 +12,9 @@ streams on the H3 edge:
 | Oversize | Fail-closed: stop reading, answer **413 Payload Too Large** |
 | Response | `Body::frame` loop → `send_data` (no `collect`); same size cap |
 
-TCP upstream forwarding may still buffer for HTTP/1.1 `Content-Length` writes;
-that is outside this H3-edge step. Proxy success path no longer re-buffers the
-upstream response when attaching request-id headers.
+TCP upstream buffering for HTTP/1.1 is addressed in **P14.4** (chunked write +
+streamed response). Proxy success path no longer re-buffers the upstream
+response when attaching request-id headers.
 
 ## Verify
 
