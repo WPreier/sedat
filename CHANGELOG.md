@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.29] – 2026-11-21
+
+### Added
+
+- **P14.5 Upstream chunked decode:** decode upstream `Transfer-Encoding: chunked`
+  responses into a plain streamed body (TE takes precedence over Content-Length;
+  trailers discarded). Oversize vs `max_body_bytes` fail-closed. Phase note
+  [docs/phases/P14_05_upstream_chunked_decode.md](docs/phases/P14_05_upstream_chunked_decode.md).
+
 ## [0.1.28] – 2026-11-21
 
 ### Changed

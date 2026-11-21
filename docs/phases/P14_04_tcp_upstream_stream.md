@@ -11,9 +11,9 @@ full request bodies before writing upstream. This step closes that gap:
 | Oversize request | Fail-closed → `ProxyError::BodyTooLarge` → client **413** |
 | Upstream → client | Headers parsed first; body pumped through an mpsc channel (no `read_to_end`) under the same size cap |
 
-Upstream `Transfer-Encoding: chunked` decoding is not implemented here; typical
-`Content-Length` / connection-close bodies are streamed. H3 clients continue to
-benefit because `proxy_request` no longer buffers the full request first.
+Upstream `Transfer-Encoding: chunked` decoding landed in **P14.5**. Typical
+`Content-Length` / connection-close bodies are streamed here. H3 clients continue
+to benefit because `proxy_request` no longer buffers the full request first.
 
 ## Verify
 
