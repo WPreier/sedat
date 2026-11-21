@@ -266,13 +266,18 @@ async fn issue_certificate(
         terms_of_service_agreed: true,
         only_return_existing: false,
     };
+    // instant-acme 0.8+: Challenge.token is #[serde(default)] so authorizations that
+    // include token-less challenge types (newer Pebble dns-persist-01) still deserialize.
     let (account, creds) = if directory.contains("14000") || directory.contains("pebble") {
         let http = super::http_client::acme_http_client(directory)?;
-        Account::create_with_http(&new_account, directory, None, http)
+        Account::builder_with_http(http)
+            .create(&new_account, directory.to_string(), None)
             .await
             .map_err(|e| format!("ACME account (pebble): {e}"))?
     } else {
-        Account::create(&new_account, directory, None)
+        Account::builder()
+            .map_err(|e| format!("ACME client: {e}"))?
+            .create(&new_account, directory.to_string(), None)
             .await
             .map_err(|e| format!("ACME account: {e}"))?
     };
@@ -287,32 +292,23 @@ async fn issue_certificate(
         .map(|d| Identifier::Dns(d.clone()))
         .collect();
     let mut order = account
-        .new_order(&NewOrder {
-            identifiers: &identifiers,
-        })
+        .new_order(&NewOrder::new(&identifiers))
         .await
         .map_err(|e| format!("ACME new_order: {e}"))?;
 
-    let authorizations = order
-        .authorizations()
-        .await
-        .map_err(|e| format!("ACME authorizations: {e}"))?;
-
-    for authz in &authorizations {
-        let Identifier::Dns(domain) = &authz.identifier;
-        let domain = domain.clone();
-        let challenge = authz
-            .challenges
-            .iter()
-            .find(|c| c.r#type == ChallengeType::Dns01)
+    let mut authorizations = order.authorizations();
+    while let Some(result) = authorizations.next().await {
+        let mut authz = result.map_err(|e| format!("ACME authorizations: {e}"))?;
+        let domain = authz.identifier().to_string();
+        let mut challenge = authz
+            .challenge(ChallengeType::Dns01)
             .ok_or_else(|| format!("no DNS-01 challenge for {domain}"))?;
-        let key_auth = order.key_authorization(challenge);
-        let dns_value = key_auth.dns_value();
+        let dns_value = challenge.key_authorization().dns_value();
         dns.present(&domain, &dns_value)
             .await
             .map_err(|e| format!("dns present: {e}"))?;
-        order
-            .set_challenge_ready(&challenge.url)
+        challenge
+            .set_ready()
             .await
             .map_err(|e| format!("set_challenge_ready: {e}"))?;
     }
@@ -349,7 +345,7 @@ async fn issue_certificate(
         .serialize_request(&key_pair)
         .map_err(|e| format!("CSR: {e}"))?;
     order
-        .finalize(csr.der().as_ref())
+        .finalize_csr(csr.der().as_ref())
         .await
         .map_err(|e| format!("finalize: {e}"))?;
 

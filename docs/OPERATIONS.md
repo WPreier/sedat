@@ -114,10 +114,10 @@ Seccomp modes: [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md).
 - Local `pebble-issue` service: keep the official `rust` image PATH
   (`/usr/local/cargo/bin`). Prefer `bash -c` / plain `bash` over `bash -lc`
   (login shells reset PATH → `cargo: command not found`).
-- ACME client always sends a `User-Agent` (newer Pebble requires it).
-- Compose pins `ghcr.io/letsencrypt/pebble:2.7.0` so `instant-acme` 0.7 is not
-  broken by `:latest` `dns-persist-01` challenges (missing `token`).
-  See [phases/P15_01_pebble_ci_stabilize.md](phases/P15_01_pebble_ci_stabilize.md).
+- ACME client uses **instant-acme 0.8** (`Challenge.token` optional) so newer
+  Pebble challenges (e.g. `dns-persist-01`) deserialize; Compose uses
+  `pebble:latest`. See
+  [phases/P15_02_instant_acme_token.md](phases/P15_02_instant_acme_token.md).
 
 ```bash
 docker compose -f docker-compose.dev.yml --profile acme up -d pebble
