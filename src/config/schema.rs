@@ -77,10 +77,19 @@ pub struct ServerConfig {
     /// `admin_token` when the file is non-empty. Env `SEDAT_ADMIN_TOKEN` wins over both.
     #[serde(default)]
     pub admin_token_file: String,
+    /// After admin `reload-token` (or config reload that changes the token), keep
+    /// accepting the **previous** token for this many seconds (dual-token overlap).
+    /// Default **300**. `0` = hard cut (only the new token).
+    #[serde(default = "default_admin_token_overlap")]
+    pub admin_token_overlap_secs: u64,
     /// Optional loopback-only Prometheus HTTP scrape address (e.g. `127.0.0.1:9090`).
     /// Empty / unset disables the sidecar. Non-loopback addresses fail validation.
     #[serde(default)]
     pub metrics_listen: Option<String>,
+}
+
+fn default_admin_token_overlap() -> u64 {
+    300
 }
 
 fn default_listen() -> String {
@@ -112,6 +121,7 @@ impl Default for ServerConfig {
             admin_group: None,
             admin_token: String::new(),
             admin_token_file: String::new(),
+            admin_token_overlap_secs: default_admin_token_overlap(),
             metrics_listen: None,
         }
     }

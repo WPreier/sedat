@@ -5,6 +5,17 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.19] – 2026-11-21
+
+### Added
+
+- **P12.3 Token rotation without full reload:** admin `reload-token` re-reads
+  `SEDAT_ADMIN_TOKEN` / `admin_token_file` / `admin_token` into a live gate
+  shared by socket `AUTH` and metrics Bearer; dual-token overlap via
+  `admin_token_overlap_secs` (default 300); fail-closed if sources would clear
+  auth. JSONL `admin_token_reload`. Phase note
+  [docs/phases/P12_03_token_rotation.md](docs/phases/P12_03_token_rotation.md).
+
 ## [0.1.18] – 2026-11-21
 
 ### Added

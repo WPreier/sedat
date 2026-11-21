@@ -264,6 +264,17 @@ impl AuditSink {
         }));
     }
 
+    /// Admin token live reload / rotate (P12.3). Never includes secret material.
+    pub fn emit_admin_token_reload(&self, outcome: &str, overlap_secs: Option<u64>) {
+        self.emit(json!({
+            "event": "admin_token_reload",
+            "request_id": Value::Null,
+            "peer": Value::Null,
+            "outcome": outcome,
+            "overlap_secs": overlap_secs,
+        }));
+    }
+
     /// Failed metrics-sidecar Bearer authentication (P12.1).
     /// Never includes the presented secret.
     pub fn emit_metrics_auth_fail(&self, reason: &str) {

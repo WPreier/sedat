@@ -200,6 +200,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             user_config,
             state_dir: PathBuf::from(&cfg.server.state_dir),
             config: state.config.clone(),
+            tokens: admin::LiveAdminTokens::from_config(&cfg),
             limiter: state.limiter.clone(),
             acme_status,
             audit,

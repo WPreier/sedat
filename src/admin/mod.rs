@@ -5,7 +5,8 @@ mod selftest;
 
 pub use auth::{
     metrics_token_authorized, parse_auth_line, parse_bearer_authorization, resolve_admin_token,
-    token_matches, ADMIN_TOKEN_ENV,
+    token_matches, LiveAdminTokens, TokenReloadOutcome, TokenReloadWouldDisable, ADMIN_TOKEN_ENV,
+    DEFAULT_TOKEN_OVERLAP_SECS,
 };
 pub use selftest::{now_start, run_selftest, SelftestCheck, SelftestReport};
 
@@ -31,6 +32,8 @@ pub struct AdminState {
     pub state_dir: std::path::PathBuf,
     /// Live config.
     pub config: Arc<ArcSwap<SedatConfig>>,
+    /// Live admin/metrics token gate (P12.3 hot-rotate + overlap).
+    pub tokens: LiveAdminTokens,
     /// Limiter for stats.
     pub limiter: Arc<Limiter>,
     /// ACME status (optional).
@@ -130,7 +133,7 @@ pub async fn serve_metrics_sidecar(addr: std::net::SocketAddr, state: AdminState
     use std::convert::Infallible;
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    let token_required = resolve_admin_token(&state.config.load()).is_some();
+    let token_required = state.tokens.is_required();
     info!(
         %addr,
         token_required,
@@ -185,9 +188,9 @@ pub fn metrics_sidecar_response(
             .unwrap();
     }
 
-    let expected = resolve_admin_token(&state.config.load());
-    if !metrics_token_authorized(expected.as_deref(), authorization) {
-        let reason = if expected.is_some() && authorization.is_none() {
+    let required = state.tokens.is_required();
+    if !state.tokens.metrics_authorized(authorization) {
+        let reason = if required && authorization.is_none() {
             "metrics_required"
         } else {
             "metrics_bad_token"
@@ -230,33 +233,30 @@ async fn handle_client(conn: tokio::net::UnixStream, state: AdminState) -> std::
 /// (except `help` / `quit`). Empty token config → FS ACL only (dev-friendly).
 #[must_use]
 pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) -> (String, bool) {
-    let expected = resolve_admin_token(&state.config.load());
-    let token_required = expected.is_some();
+    let token_required = state.tokens.is_required();
 
     if let Some(presented) = parse_auth_line(line) {
-        return match &expected {
-            None => (
+        if !token_required {
+            return (
                 "ERR auth not required (no admin token configured)\n".into(),
                 false,
-            ),
-            Some(exp) => {
-                if presented.is_empty() {
-                    warn!(target: "sedat::audit", "admin AUTH missing token");
-                    state.audit.emit_admin_auth_fail("missing_token");
-                    *authed = false;
-                    ("ERR auth failed\n".into(), false)
-                } else if token_matches(presented, exp) {
-                    *authed = true;
-                    info!(target: "sedat::audit", "admin AUTH ok");
-                    ("OK auth\n".into(), false)
-                } else {
-                    warn!(target: "sedat::audit", "admin AUTH failed");
-                    state.audit.emit_admin_auth_fail("bad_token");
-                    *authed = false;
-                    ("ERR auth failed\n".into(), false)
-                }
-            }
-        };
+            );
+        }
+        if presented.is_empty() {
+            warn!(target: "sedat::audit", "admin AUTH missing token");
+            state.audit.emit_admin_auth_fail("missing_token");
+            *authed = false;
+            return ("ERR auth failed\n".into(), false);
+        }
+        if state.tokens.matches_presented(presented) {
+            *authed = true;
+            info!(target: "sedat::audit", "admin AUTH ok");
+            return ("OK auth\n".into(), false);
+        }
+        warn!(target: "sedat::audit", "admin AUTH failed");
+        state.audit.emit_admin_auth_fail("bad_token");
+        *authed = false;
+        return ("ERR auth failed\n".into(), false);
     }
 
     let trimmed = line.trim();
@@ -270,9 +270,9 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
     }
     if verb == "help" {
         let help = if token_required {
-            "commands: AUTH <token> | status | health | metrics | reload | cert | selftest [json] | bans | unban <ip> | quit\n"
+            "commands: AUTH <token> | status | health | metrics | reload | reload-token | cert | selftest [json] | bans | unban <ip> | quit\n"
         } else {
-            "commands: status | health | metrics | reload | cert | selftest [json] | bans | unban <ip> | quit\n"
+            "commands: status | health | metrics | reload | reload-token | cert | selftest [json] | bans | unban <ip> | quit\n"
         };
         return (help.into(), false);
     }
@@ -310,12 +310,32 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
                 ) {
                     warn!(error = %e, "audit jsonl reconfigure failed");
                 }
+                let overlap = active.config.server.admin_token_overlap_secs;
+                let token_note = match state.tokens.reload_from_config(&active.config, overlap) {
+                    Ok(outcome) => {
+                        audit_token_reload(state, &outcome);
+                        format_token_reload_note(&outcome)
+                    }
+                    Err(TokenReloadWouldDisable) => {
+                        warn!(
+                            target: "sedat::audit",
+                            "config reload kept previous admin token (new sources empty)"
+                        );
+                        state
+                            .audit
+                            .emit_admin_token_reload("rejected_would_disable", None);
+                        " token=kept_fail_closed".into()
+                    }
+                };
                 state.audit.emit_config_reload(&changes, &summary);
                 state.config.store(Arc::new(active.config));
-                format!("OK reload audit={summary}\n")
+                format!("OK reload audit={summary}{token_note}\n")
             }
             Err(e) => format!("ERR reload: {e}\n"),
         },
+        "reload-token" | "token-reload" | "reload_token" | "token_reload" => {
+            reload_admin_token(state)
+        }
         "cert" | "cert-info" | "cert_info" => format_cert(state),
         "selftest" | "self-test" | "self_test" => {
             let want_json = matches!(
@@ -345,6 +365,57 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
         other => format!("ERR unknown command: {other}\n"),
     };
     (reply, false)
+}
+
+fn reload_admin_token(state: &AdminState) -> String {
+    let cfg = state.config.load_full();
+    let overlap = cfg.server.admin_token_overlap_secs;
+    match state.tokens.reload_from_config(&cfg, overlap) {
+        Ok(outcome) => {
+            audit_token_reload(state, &outcome);
+            info!(target: "sedat::audit", ?outcome, "admin token reload ok");
+            match outcome {
+                TokenReloadOutcome::UnchangedEmpty => {
+                    "OK reload-token unchanged (auth off)\n".into()
+                }
+                TokenReloadOutcome::Unchanged => "OK reload-token unchanged\n".into(),
+                TokenReloadOutcome::Enabled => "OK reload-token enabled\n".into(),
+                TokenReloadOutcome::Rotated { overlap_secs } => {
+                    format!("OK reload-token rotated overlap_secs={overlap_secs}\n")
+                }
+            }
+        }
+        Err(TokenReloadWouldDisable) => {
+            warn!(
+                target: "sedat::audit",
+                "admin reload-token rejected (would disable auth)"
+            );
+            state
+                .audit
+                .emit_admin_token_reload("rejected_would_disable", None);
+            "ERR reload-token: new token sources empty (fail-closed; previous token kept)\n".into()
+        }
+    }
+}
+
+fn audit_token_reload(state: &AdminState, outcome: &TokenReloadOutcome) {
+    let (name, overlap) = match outcome {
+        TokenReloadOutcome::UnchangedEmpty => ("unchanged_empty", None),
+        TokenReloadOutcome::Unchanged => ("unchanged", None),
+        TokenReloadOutcome::Enabled => ("enabled", None),
+        TokenReloadOutcome::Rotated { overlap_secs } => ("rotated", Some(*overlap_secs)),
+    };
+    state.audit.emit_admin_token_reload(name, overlap);
+}
+
+fn format_token_reload_note(outcome: &TokenReloadOutcome) -> String {
+    match outcome {
+        TokenReloadOutcome::UnchangedEmpty | TokenReloadOutcome::Unchanged => String::new(),
+        TokenReloadOutcome::Enabled => " token=enabled".into(),
+        TokenReloadOutcome::Rotated { overlap_secs } => {
+            format!(" token=rotated overlap_secs={overlap_secs}")
+        }
+    }
 }
 
 fn format_bans(state: &AdminState) -> String {
@@ -432,13 +503,14 @@ mod tests {
     use super::*;
     use crate::limits::Limiter;
 
-    fn sample_state_with(mut cfg: SedatConfig, audit: AuditSink) -> AdminState {
+    fn sample_state_with(cfg: SedatConfig, audit: AuditSink) -> AdminState {
         std::env::remove_var(ADMIN_TOKEN_ENV);
-        cfg.server.admin_token_file.clear();
+        let tokens = LiveAdminTokens::from_config(&cfg);
         AdminState {
             user_config: "x".into(),
             state_dir: "y".into(),
             config: Arc::new(ArcSwap::from_pointee(cfg)),
+            tokens,
             limiter: Limiter::new(Default::default()),
             acme_status: None,
             audit,
@@ -688,6 +760,63 @@ mod tests {
         assert!(r.contains("bans"), "{r}");
         assert!(r.contains("unban <ip>"), "{r}");
         assert!(r.contains("selftest [json]"), "{r}");
+        assert!(r.contains("reload-token"), "{r}");
+    }
+
+    #[test]
+    fn reload_token_rotates_with_overlap() {
+        let dir = tempfile::tempdir().unwrap();
+        let token_path = dir.path().join("admin.token");
+        std::fs::write(&token_path, b"old-secret\n").unwrap();
+        let audit_path = dir.path().join("a.jsonl");
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+
+        let mut cfg = SedatConfig {
+            schema_version: 1,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.admin_token_file = token_path.to_string_lossy().into();
+        cfg.server.admin_token_overlap_secs = 120;
+        let state = sample_state_with(cfg, audit);
+
+        let mut authed = false;
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "AUTH old-secret");
+        assert_eq!(r, "OK auth\n");
+
+        std::fs::write(&token_path, b"new-secret\n").unwrap();
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "reload-token");
+        assert!(
+            r.starts_with("OK reload-token rotated overlap_secs=120"),
+            "{r}"
+        );
+
+        // New connection style: previous still accepted during overlap.
+        let mut a2 = false;
+        let (r, _) = dispatch_admin_line(&state, &mut a2, "AUTH old-secret");
+        assert_eq!(r, "OK auth\n", "previous token should work in overlap");
+        let mut a3 = false;
+        let (r, _) = dispatch_admin_line(&state, &mut a3, "AUTH new-secret");
+        assert_eq!(r, "OK auth\n");
+
+        // Fail-closed: empty file must not disable auth.
+        std::fs::write(&token_path, b"\n").unwrap();
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "reload-token");
+        assert!(r.starts_with("ERR reload-token:"), "{r}");
+        assert!(state.tokens.is_required());
+
+        let text = std::fs::read_to_string(&audit_path).unwrap();
+        assert!(text.contains("\"event\":\"admin_token_reload\""));
+        assert!(text.contains("\"outcome\":\"rotated\""));
+        assert!(text.contains("\"outcome\":\"rejected_would_disable\""));
     }
 
     #[test]
