@@ -14,7 +14,8 @@ listener can drive real HTTP/3 requests instead of accept/limit-only.
 
 ## Limits / non-goals
 
-- Request/response bodies are fully buffered (not streamed) in this step.
+- Request/response bodies were fully buffered in this step; **P14.3** streams
+  them on the H3 edge.
 - Still behind `experimental.h3` + feature flag; h1/h2 remain primary.
 - Attack corpus (P13.1) unchanged in intent; still exercises caps.
 

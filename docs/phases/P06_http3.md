@@ -29,5 +29,7 @@
 
 ## 6. Risiken
 
-Request bridging shipped in **P14.2** (buffered bodies; still experimental /
-feature-gated). See [P14_02_h3_request_proxy.md](P14_02_h3_request_proxy.md).
+Request bridging shipped in **P14.2**; streamed bodies in **P14.3** (still
+experimental / feature-gated). See
+[P14_02_h3_request_proxy.md](P14_02_h3_request_proxy.md) and
+[P14_03_h3_streamed_bodies.md](P14_03_h3_streamed_bodies.md).
