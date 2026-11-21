@@ -3,12 +3,17 @@
 //! Disabled by default (`logging.audit_jsonl` empty). Writes never block the
 //! request path for long: a contended lock drops the event and increments
 //! [`AuditSink::dropped`].
+//!
+//! Rotation (either trigger renames the active file to `*.jsonl.1`):
+//! - **size** — `audit_jsonl_max_bytes` (`0` = off)
+//! - **age** — `audit_jsonl_max_age_secs` (`0` = off; P12.4)
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use parking_lot::Mutex;
 use serde_json::{json, Value};
@@ -32,6 +37,10 @@ struct Inner {
 struct SinkState {
     path: Option<PathBuf>,
     max_bytes: u64,
+    /// Rotate when the current segment is at least this old (`0` = disabled).
+    max_age_secs: u64,
+    /// Start of the current file segment (for age rotation).
+    segment_started: Option<SystemTime>,
     file: Option<File>,
 }
 
@@ -48,15 +57,21 @@ impl AuditSink {
     }
 
     /// Open (or create) sink from config path. Empty path → disabled.
-    pub fn open(path: &str, max_bytes: u64) -> std::io::Result<Self> {
+    ///
+    /// `max_bytes` / `max_age_secs`: `0` disables that rotation trigger.
+    pub fn open(path: &str, max_bytes: u64, max_age_secs: u64) -> std::io::Result<Self> {
         let sink = Self::disabled();
-        sink.reconfigure(path, max_bytes)?;
+        sink.reconfigure(path, max_bytes, max_age_secs)?;
         Ok(sink)
     }
 
     /// From logging config helpers.
-    pub fn from_logging(audit_jsonl: &str, max_bytes: u64) -> std::io::Result<Self> {
-        Self::open(audit_jsonl, max_bytes)
+    pub fn from_logging(
+        audit_jsonl: &str,
+        max_bytes: u64,
+        max_age_secs: u64,
+    ) -> std::io::Result<Self> {
+        Self::open(audit_jsonl, max_bytes, max_age_secs)
     }
 
     /// Events dropped because the sink lock was busy or I/O failed.
@@ -87,13 +102,20 @@ impl AuditSink {
     }
 
     /// Re-open / disable when config reloads. Empty `path` disables.
-    pub fn reconfigure(&self, path: &str, max_bytes: u64) -> std::io::Result<()> {
+    pub fn reconfigure(
+        &self,
+        path: &str,
+        max_bytes: u64,
+        max_age_secs: u64,
+    ) -> std::io::Result<()> {
         let mut st = self.inner.state.lock();
         st.max_bytes = max_bytes;
+        st.max_age_secs = max_age_secs;
         let trimmed = path.trim();
         if trimmed.is_empty() {
             st.path = None;
             st.file = None;
+            st.segment_started = None;
             return Ok(());
         }
         let p = PathBuf::from(trimmed);
@@ -102,10 +124,18 @@ impl AuditSink {
                 fs::create_dir_all(parent)?;
             }
         }
+        let started = segment_start_for_path(&p);
         let file = open_append(&p)?;
         st.path = Some(p);
         st.file = Some(file);
+        st.segment_started = Some(started);
         Ok(())
+    }
+
+    /// Backdate the current segment start (unit tests for age rotation).
+    #[cfg(test)]
+    pub fn set_segment_started_for_test(&self, started: SystemTime) {
+        self.inner.state.lock().segment_started = Some(started);
     }
 
     /// Emit a structured event as one JSON line. Never panics; may drop.
@@ -306,23 +336,63 @@ fn open_append(path: &Path) -> std::io::Result<File> {
     OpenOptions::new().create(true).append(true).open(path)
 }
 
+/// Prefer birth time when available; else modified-at-open; else now.
+fn segment_start_for_path(path: &Path) -> SystemTime {
+    match fs::metadata(path) {
+        Ok(meta) => meta
+            .created()
+            .or_else(|_| meta.modified())
+            .unwrap_or_else(|_| SystemTime::now()),
+        Err(_) => SystemTime::now(),
+    }
+}
+
+fn needs_age_rotate(st: &SinkState) -> bool {
+    if st.max_age_secs == 0 {
+        return false;
+    }
+    let Some(started) = st.segment_started else {
+        return false;
+    };
+    match SystemTime::now().duration_since(started) {
+        Ok(age) => age >= Duration::from_secs(st.max_age_secs),
+        Err(_) => false,
+    }
+}
+
+fn needs_size_rotate(st: &SinkState, path: &Path) -> bool {
+    if st.max_bytes == 0 {
+        return false;
+    }
+    fs::metadata(path)
+        .map(|m| m.len() >= st.max_bytes)
+        .unwrap_or(false)
+}
+
+fn rotate_file(st: &mut SinkState, path: &Path) -> std::io::Result<()> {
+    st.file = None;
+    let rotated = path.with_extension("jsonl.1");
+    let _ = fs::remove_file(&rotated);
+    if path.exists() {
+        fs::rename(path, &rotated)?;
+    }
+    st.file = Some(open_append(path)?);
+    st.segment_started = Some(SystemTime::now());
+    Ok(())
+}
+
 fn write_line(st: &mut SinkState, line: &str) -> std::io::Result<()> {
     let path = st.path.clone().ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::NotFound, "audit path unset")
     })?;
-    if st.max_bytes > 0 {
-        if let Ok(meta) = fs::metadata(&path) {
-            if meta.len() >= st.max_bytes {
-                st.file = None;
-                let rotated = path.with_extension("jsonl.1");
-                let _ = fs::remove_file(&rotated);
-                fs::rename(&path, &rotated)?;
-                st.file = Some(open_append(&path)?);
-            }
-        }
+    if needs_size_rotate(st, &path) || needs_age_rotate(st) {
+        rotate_file(st, &path)?;
     }
     if st.file.is_none() {
         st.file = Some(open_append(&path)?);
+        if st.segment_started.is_none() {
+            st.segment_started = Some(SystemTime::now());
+        }
     }
     let file = st.file.as_mut().expect("file just opened");
     file.write_all(line.as_bytes())?;
@@ -365,7 +435,7 @@ mod tests {
     fn writes_proxy_reject() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("a.jsonl");
-        let s = AuditSink::open(path.to_str().unwrap(), 0).unwrap();
+        let s = AuditSink::open(path.to_str().unwrap(), 0, 0).unwrap();
         s.emit_proxy_reject("127.0.0.1:9", "untrusted_or_disabled", "plaintext");
         let text = std::fs::read_to_string(&path).unwrap();
         let v: Value = serde_json::from_str(text.lines().next().unwrap()).unwrap();
@@ -379,7 +449,7 @@ mod tests {
     fn writes_jsonl_with_request_id() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.jsonl");
-        let s = AuditSink::open(path.to_str().unwrap(), 0).unwrap();
+        let s = AuditSink::open(path.to_str().unwrap(), 0, 0).unwrap();
         s.emit_proxy_deny(
             "smuggling",
             400,
@@ -403,7 +473,7 @@ mod tests {
     fn config_reload_lines() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.jsonl");
-        let s = AuditSink::open(path.to_str().unwrap(), 0).unwrap();
+        let s = AuditSink::open(path.to_str().unwrap(), 0, 0).unwrap();
         let changes = vec![SecurityChange {
             key: "proxy_protocol.inbound_enabled".into(),
             old: "false".into(),
@@ -421,7 +491,7 @@ mod tests {
     fn rotates_when_max_bytes_exceeded() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.jsonl");
-        let s = AuditSink::open(path.to_str().unwrap(), 80).unwrap();
+        let s = AuditSink::open(path.to_str().unwrap(), 80, 0).unwrap();
         for i in 0..20 {
             s.emit_proxy_deny(
                 "rate_limit",
@@ -442,6 +512,30 @@ mod tests {
     }
 
     #[test]
+    fn rotates_when_max_age_exceeded() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let s = AuditSink::open(path.to_str().unwrap(), 0, 1).unwrap();
+        s.emit_startup("age-1");
+        assert!(path.exists());
+        assert!(!path.with_extension("jsonl.1").exists());
+
+        s.set_segment_started_for_test(SystemTime::now() - Duration::from_secs(2));
+        s.emit_startup("age-2");
+
+        let rotated = path.with_extension("jsonl.1");
+        assert!(
+            rotated.exists(),
+            "expected age rotation to {}",
+            rotated.display()
+        );
+        let fresh = fs::read_to_string(&path).unwrap();
+        assert!(fresh.contains("age-2"), "{fresh}");
+        let old = fs::read_to_string(&rotated).unwrap();
+        assert!(old.contains("age-1"), "{old}");
+    }
+
+    #[test]
     fn path_validation() {
         assert!(valid_audit_path(""));
         assert!(valid_audit_path("./state/audit.jsonl"));
@@ -453,7 +547,7 @@ mod tests {
     fn drops_when_lock_busy() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("audit.jsonl");
-        let s = AuditSink::open(path.to_str().unwrap(), 0).unwrap();
+        let s = AuditSink::open(path.to_str().unwrap(), 0, 0).unwrap();
         let s2 = s.clone();
         let (ready_tx, ready_rx) = std::sync::mpsc::channel();
         let (done_tx, done_rx) = std::sync::mpsc::channel();

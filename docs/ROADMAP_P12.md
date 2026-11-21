@@ -48,8 +48,9 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Age-based rotate for `audit_jsonl` beside size rotate |
+| **Status** | **done** (v0.1.20) |
+| **Behavior** | Age-based rotate via `audit_jsonl_max_age_secs` (default 0) beside size rotate |
+| **Phase note** | [phases/P12_04_audit_age_rotate.md](phases/P12_04_audit_age_rotate.md) |
 
 ### P12.5 – Upstream pin hostname + re-resolve
 
@@ -72,6 +73,6 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 | 1 | Metrics-sidecar token | **done** (v0.1.17) |
 | 2 | Sliding / extending bans | **done** (v0.1.18) |
 | 3 | Token rotation w/o reload | **done** (v0.1.19) |
-| 4 | Time-based audit rotate | pending |
+| 4 | Time-based audit rotate | **done** (v0.1.20) |
 | 5 | Upstream pin re-resolve | pending |
 | 6 | Shared ban state | pending |

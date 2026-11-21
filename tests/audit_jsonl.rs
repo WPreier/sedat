@@ -61,7 +61,7 @@ async fn rate_limit_writes_audit_with_request_id() {
     let audit_str = audit_path.to_str().unwrap();
 
     let cfg = test_config("http://127.0.0.1:9", audit_str);
-    let audit = AuditSink::open(audit_str, 0).unwrap();
+    let audit = AuditSink::open(audit_str, 0, 0).unwrap();
     let state = ProxyState::with_audit(cfg, audit);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -149,7 +149,7 @@ async fn early_smuggling_writes_audit_with_request_id() {
     let mut cfg = test_config("http://127.0.0.1:9", audit_str);
     cfg.limits.rate_limit_per_ip = 10_000;
     cfg.limits.rate_limit_burst = 10_000;
-    let audit = AuditSink::open(audit_str, 0).unwrap();
+    let audit = AuditSink::open(audit_str, 0, 0).unwrap();
     let state = ProxyState::with_audit(cfg, audit);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

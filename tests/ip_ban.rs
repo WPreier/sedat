@@ -84,7 +84,7 @@ async fn bans_after_rate_limit_series_and_audits() {
     let audit_str = audit_path.to_str().unwrap();
 
     let cfg = test_config(audit_str);
-    let audit = AuditSink::open(audit_str, 0).unwrap();
+    let audit = AuditSink::open(audit_str, 0, 0).unwrap();
     let state = ProxyState::with_audit(cfg, audit);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

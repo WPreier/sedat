@@ -511,6 +511,10 @@ pub struct LoggingConfig {
     /// Rotated file is renamed to `*.jsonl.1`.
     #[serde(default = "default_audit_max_bytes")]
     pub audit_jsonl_max_bytes: u64,
+    /// Rotate the audit file when the current segment is at least this many
+    /// seconds old (`0` = never; default). Runs beside size rotation (P12.4).
+    #[serde(default = "default_audit_max_age")]
+    pub audit_jsonl_max_age_secs: u64,
 }
 
 fn default_log_level() -> String {
@@ -525,6 +529,10 @@ fn default_audit_max_bytes() -> u64 {
     10_485_760
 }
 
+fn default_audit_max_age() -> u64 {
+    0
+}
+
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
@@ -533,6 +541,7 @@ impl Default for LoggingConfig {
             request_id_header: default_request_id_header(),
             audit_jsonl: String::new(),
             audit_jsonl_max_bytes: default_audit_max_bytes(),
+            audit_jsonl_max_age_secs: default_audit_max_age(),
         }
     }
 }
