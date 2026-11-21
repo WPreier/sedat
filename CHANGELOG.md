@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`http3` feature build:** drop broken optional `h3` / `h3-quinn` 0.0.7
   (quinn 0.11 `StreamId` API drift); feature is Quinn-only for the experimental
   listener + corpus. Set QUIC ALPN to `h3`.
+- **CI vs rustc 1.100:** `cargo fmt` sweep + clippy cleanups
+  (`manual_contains`, `io_other_error`, `&Box<T>`, etc.); allow
+  `clippy::field_reassign_with_default` for test helpers.
 
 ## [0.1.22] – 2026-11-21
 

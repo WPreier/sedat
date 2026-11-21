@@ -115,6 +115,7 @@ fn attach_request_id(
 }
 
 /// Pre-hyper HTTP/1 early reject: response header + JSONL + tracing with request_id.
+#[allow(clippy::too_many_arguments)]
 async fn write_early_http_deny(
     stream: &mut PrefixedStream,
     state: &ProxyState,
@@ -163,6 +164,7 @@ async fn write_early_http_deny(
     let _ = stream.write_all(resp.as_bytes()).await;
 }
 
+#[allow(clippy::too_many_arguments)]
 fn deny_response(
     state: &ProxyState,
     cfg: &SedatConfig,

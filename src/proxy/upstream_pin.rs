@@ -133,7 +133,7 @@ pub fn ip_allowed_by_pin(ip: IpAddr, pin: &ExpandedPin) -> bool {
             cidrs
                 .iter()
                 .any(|(net, prefix)| ip_in_cidr(ip, *net, *prefix))
-                || host_ips.iter().any(|h| *h == ip)
+                || host_ips.contains(&ip)
         }
     }
 }

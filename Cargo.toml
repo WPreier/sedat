@@ -102,6 +102,11 @@ path = "examples/hello_listen.rs"
 name = "config_demo"
 path = "examples/config/config_demo.rs"
 
+[lints.clippy]
+# Test helpers commonly tweak a few Default fields; rustc 1.100 made this deny-by-default
+# under `-D warnings`. Prefer struct update form in new code when convenient.
+field_reassign_with_default = "allow"
+
 [profile.release]
 lto = true
 codegen-units = 1

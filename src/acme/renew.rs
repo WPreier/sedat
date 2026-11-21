@@ -77,7 +77,7 @@ impl AcmeManager {
         let directory = directory_url(&self.cfg.directory);
         info!(%directory, domains = ?self.cfg.domains, "ACME order starting");
 
-        match issue_certificate(&self.cfg, &self.paths, &self.dns, &directory).await {
+        match issue_certificate(&self.cfg, &self.paths, self.dns.as_ref(), &directory).await {
             Ok((cert_pem, key_pem)) => {
                 self.install_cert(&cert_pem, &key_pem)?;
                 Ok(())
@@ -225,7 +225,7 @@ impl AcmeManager {
 async fn issue_certificate(
     cfg: &AcmeConfig,
     paths: &AcmePaths,
-    dns: &Box<dyn DnsProvider>,
+    dns: &dyn DnsProvider,
     directory: &str,
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
     use instant_acme::{Account, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus};

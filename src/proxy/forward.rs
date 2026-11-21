@@ -289,10 +289,7 @@ async fn connect_pinned_upstream(
         }
     }
     Err(ProxyError::Io(last_err.unwrap_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "all pinned upstream connects failed",
-        )
+        std::io::Error::other("all pinned upstream connects failed")
     })))
 }
 

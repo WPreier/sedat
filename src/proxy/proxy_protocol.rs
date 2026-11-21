@@ -258,7 +258,7 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
         };
     }
 
-    if looks_like_proxy_v2(&buf) || (n >= 12 && &buf[..12.min(n)] == &PROXY_V2_SIG[..12.min(n)]) {
+    if looks_like_proxy_v2(&buf) || (n >= 12 && buf[..12.min(n)] == PROXY_V2_SIG[..12.min(n)]) {
         while buf.len() < 16 {
             let mut b = [0u8; 1];
             let k = stream.read(&mut b).await?;

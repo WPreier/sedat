@@ -47,10 +47,12 @@ mod corpus {
         let (cert, key) = sedat::tls::generate_self_signed("localhost").unwrap();
         let sc = sedat::tls::server_config_from_pem(&cert, &key).unwrap();
         let tls_state = TlsState::new(sc);
-        let mut limits = sedat::config::LimitsConfig::default();
-        limits.max_h3_connections = max_conn;
-        limits.max_h3_streams = max_streams;
-        limits.request_timeout_secs = 2;
+        let limits = sedat::config::LimitsConfig {
+            max_h3_connections: max_conn,
+            max_h3_streams: max_streams,
+            request_timeout_secs: 2,
+            ..Default::default()
+        };
         let cfg = SedatConfig {
             schema_version: 1,
             server: ServerConfig {
@@ -73,10 +75,9 @@ mod corpus {
             proxy_protocol: ProxyProtocolConfig::default(),
             limits: limits.clone(),
             embedded_docs: Default::default(),
-            experimental: {
-                let mut e = sedat::config::ExperimentalConfig::default();
-                e.h3 = true;
-                e
+            experimental: sedat::config::ExperimentalConfig {
+                h3: true,
+                ..Default::default()
             },
             logging: Default::default(),
             hardening: Default::default(),

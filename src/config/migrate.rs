@@ -16,10 +16,9 @@ pub fn migration_path(from: u32, to: u32) -> Option<&'static str> {
     if to != CURRENT_SCHEMA_VERSION {
         return None;
     }
-    match from {
-        // Future: map 0 → 1 (or N → N+1) with documented field renames here.
-        _ => None,
-    }
+    let _ = from;
+    // Future: map 0 → 1 (or N → N+1) with documented field renames here.
+    None
 }
 
 /// Extract `schema_version` from TOML text without full validation.

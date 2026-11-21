@@ -100,7 +100,7 @@ fn certificate_id_from_der(der: &[u8]) -> Result<String, String> {
         .find_map(|ext| match ext.parsed_extension() {
             ParsedExtension::AuthorityKeyIdentifier(aki_ext) => {
                 aki_ext.key_identifier.as_ref().map(|ki| {
-                    let b: &[u8] = ki.0.as_ref();
+                    let b: &[u8] = ki.0;
                     b
                 })
             }
