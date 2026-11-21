@@ -153,3 +153,32 @@ async fn allowlist_rejects_wrong_pin() {
         "{body}"
     );
 }
+
+#[tokio::test]
+async fn hostname_literal_pin_allows_localhost() {
+    let up = spawn_upstream().await;
+    // Pin by hostname literal (P12.5); localhost resolves to loopback.
+    let mut c = cfg(&format!("http://{up}"), vec!["localhost".into()]);
+    c.routes.hosts[0].paths[0].upstream_dns_refresh_secs = 60;
+    let state = ProxyState::new(c);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let st = state.clone();
+    tokio::spawn(async move {
+        loop {
+            let (stream, peer) = listener.accept().await.unwrap();
+            let st = st.clone();
+            tokio::spawn(async move {
+                let io = TokioIo::new(stream);
+                let svc = service_fn(move |req| {
+                    let st = st.clone();
+                    async move { handle_request(req, peer, st, None).await }
+                });
+                let _ = http1::Builder::new().serve_connection(io, svc).await;
+            });
+        }
+    });
+    tokio::time::sleep(Duration::from_millis(30)).await;
+    let (status, body) = hit(addr).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}

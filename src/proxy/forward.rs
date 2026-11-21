@@ -1,6 +1,7 @@
 //! Upstream forwarding with optional PROXY header, IP pin, and HTTPS/mTLS.
 
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
@@ -17,7 +18,9 @@ use crate::config::ProxyProtocolConfig;
 use super::proxy_protocol::{encode_proxy_v1, encode_proxy_v2, ProxyVersion};
 use super::router::RouteMatch;
 use super::upstream_mtls::{build_upstream_client_config, UpstreamTlsPaths};
-use super::upstream_pin::{filter_pinned_addrs, upstream_ip_allowed};
+use super::upstream_pin::{
+    expand_allowlist, filter_pinned_addrs_expanded, ip_allowed_by_pin, DnsCache, ExpandedPin,
+};
 
 /// Proxy forwarding error.
 #[derive(Debug, Error)]
@@ -54,6 +57,7 @@ pub async fn proxy_request(
     pp: &ProxyProtocolConfig,
     max_body: usize,
     request_id: RequestIdFwd<'_>,
+    dns_cache: &DnsCache,
 ) -> Result<Response<Full<Bytes>>, ProxyError> {
     let upstream_base: Uri = route
         .upstream
@@ -104,7 +108,10 @@ pub async fn proxy_request(
         .map_err(|e| ProxyError::Hyper(format!("{e}")))?;
 
     let version = ProxyVersion::parse(&pp.outbound);
-    let mut stream = connect_pinned_upstream(host, port, &route.upstream_allowlist).await?;
+    let refresh = Duration::from_secs(route.upstream_dns_refresh_secs);
+    let mut stream =
+        connect_pinned_upstream(host, port, &route.upstream_allowlist, dns_cache, refresh)
+            .await?;
 
     // Plain HTTP upstream: optional PROXY framing, then HTTP.
     // HTTPS / mTLS: ClientHello must be first on the wire — skip outbound PROXY
@@ -227,23 +234,36 @@ where
     parse_http_response(&resp_buf, target)
 }
 
-/// Resolve `host:port`, apply optional IP pin, connect to an allowed address.
+/// Resolve `host:port` (cached), apply optional IP/hostname pin, connect.
 async fn connect_pinned_upstream(
     host: &str,
     port: u16,
     allowlist: &[String],
+    dns_cache: &DnsCache,
+    refresh: Duration,
 ) -> Result<TcpStream, ProxyError> {
-    let resolved: Vec<SocketAddr> = tokio::net::lookup_host((host, port))
+    let resolved = dns_cache
+        .resolve_host_addrs(host, port, refresh)
         .await
-        .map_err(ProxyError::Io)?
-        .collect();
+        .map_err(ProxyError::Io)?;
     if resolved.is_empty() {
         return Err(ProxyError::UpstreamNotAllowed(format!(
             "no addresses for {host}:{port}"
         )));
     }
 
-    let candidates = filter_pinned_addrs(&resolved, allowlist);
+    let pin = expand_allowlist(allowlist, dns_cache, refresh).await;
+    if matches!(
+        &pin,
+        ExpandedPin::Restricted { cidrs, host_ips }
+            if cidrs.is_empty() && host_ips.is_empty()
+    ) {
+        return Err(ProxyError::UpstreamNotAllowed(format!(
+            "allowlist {allowlist:?} resolved empty (fail-closed) for {host}:{port}"
+        )));
+    }
+
+    let candidates = filter_pinned_addrs_expanded(&resolved, &pin);
     if candidates.is_empty() {
         let ips: Vec<String> = resolved.iter().map(|a| a.ip().to_string()).collect();
         return Err(ProxyError::UpstreamNotAllowed(format!(
@@ -257,7 +277,7 @@ async fn connect_pinned_upstream(
         match TcpStream::connect(addr).await {
             Ok(stream) => {
                 if let Ok(peer) = stream.peer_addr() {
-                    if !upstream_ip_allowed(peer.ip(), allowlist) {
+                    if !ip_allowed_by_pin(peer.ip(), &pin) {
                         return Err(ProxyError::UpstreamNotAllowed(format!(
                             "connected peer {} rejected by pin",
                             peer.ip()

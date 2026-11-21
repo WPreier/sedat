@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.21] – 2026-11-21
+
+### Added
+
+- **P12.5 Upstream pin re-resolve:** `upstream_allowlist` accepts hostname
+  literals beside IP/CIDR; cached DNS refresh via `upstream_dns_refresh_secs`
+  (default 60, `0` = every connect); fail-closed if the expanded pin is empty or
+  peers leave it. Phase note
+  [docs/phases/P12_05_upstream_pin_reresolve.md](docs/phases/P12_05_upstream_pin_reresolve.md).
+
 ## [0.1.20] – 2026-11-21
 
 ### Added

@@ -219,11 +219,14 @@ Optional per-route allowlist (empty = unrestricted):
 [[routes.hosts.paths]]
 prefix = "/"
 upstream = "http://backend.internal:9080"
-upstream_allowlist = ["10.0.0.5", "10.0.0.0/8"]
+upstream_allowlist = ["10.0.0.5", "10.0.0.0/8", "db.internal"]  # IP/CIDR/hostname
+upstream_dns_refresh_secs = 60  # DNS cache for upstream + hostname pins; 0 = every connect
 ```
 
-When set, SeDat only connects to resolved peers in the list (fail-closed). See
-[phases/P10_06_upstream_ip_pin.md](phases/P10_06_upstream_ip_pin.md).
+When set, SeDat only connects to peers in the expanded pin (fail-closed). Hostname
+entries are re-resolved on the refresh interval (P12.5). See
+[phases/P10_06_upstream_ip_pin.md](phases/P10_06_upstream_ip_pin.md),
+[phases/P12_05_upstream_pin_reresolve.md](phases/P12_05_upstream_pin_reresolve.md).
 
 ## Optional upstream HTTPS / mTLS
 

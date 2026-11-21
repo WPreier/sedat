@@ -20,7 +20,10 @@ pub use request_id::{
     sanitize_request_id, valid_header_name, DEFAULT_REQUEST_ID_HEADER, MAX_REQUEST_ID_LEN,
 };
 pub use router::{resolve_route, RouteMatch};
-pub use upstream_pin::{filter_pinned_addrs, upstream_ip_allowed};
+pub use upstream_pin::{
+    expand_allowlist, filter_pinned_addrs, filter_pinned_addrs_expanded, ip_allowed_by_pin,
+    upstream_ip_allowed, DnsCache, ExpandedPin, DEFAULT_DNS_REFRESH_SECS,
+};
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -52,6 +55,8 @@ pub struct ProxyState {
     pub limiter: Arc<Limiter>,
     /// JSONL audit sink (may be disabled).
     pub audit: AuditSink,
+    /// Cached DNS for upstream hosts and hostname pins (P12.5).
+    pub dns_cache: DnsCache,
 }
 
 impl ProxyState {
@@ -78,6 +83,7 @@ impl ProxyState {
             config: Arc::new(ArcSwap::from_pointee(config)),
             limiter,
             audit,
+            dns_cache: DnsCache::new(),
         }
     }
 }
@@ -483,6 +489,7 @@ pub async fn handle_request(
         &cfg.proxy_protocol,
         state.limiter.max_body_bytes(),
         rid_fwd,
+        &state.dns_cache,
     )
     .await
     {

@@ -345,11 +345,13 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
                     ),
                 ));
             }
-            for cidr in &p.upstream_allowlist {
-                if parse_cidr(cidr).is_err() {
+            for entry in &p.upstream_allowlist {
+                if !is_allowlist_entry(entry) {
                     return Err(err(
-                        find_line(source, cidr),
-                        format!("invalid upstream_allowlist CIDR/IP `{cidr}`"),
+                        find_line(source, entry),
+                        format!(
+                            "invalid upstream_allowlist entry `{entry}` (need IP/CIDR or hostname)"
+                        ),
                     ));
                 }
             }
@@ -388,6 +390,16 @@ fn is_loopback_listen(addr: &str) -> bool {
     }
 }
 
+/// True if `s` is a valid IP/CIDR or hostname token for allowlists / pins.
+#[must_use]
+pub fn is_allowlist_entry(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return false;
+    }
+    parse_cidr(t).is_ok() || host_re().is_match(t)
+}
+
 /// Parse `a.b.c.d/nn` or single IP as /32.
 pub fn parse_cidr(s: &str) -> Result<(IpAddr, u8), String> {
     if let Some((ip, prefix)) = s.split_once('/') {
@@ -420,7 +432,9 @@ pub fn ip_in_allowlist(ip: IpAddr, list: &[String]) -> bool {
     })
 }
 
-fn ip_in_cidr(ip: IpAddr, net: IpAddr, prefix: u8) -> bool {
+/// True if `ip` lies in `net`/`prefix`.
+#[must_use]
+pub fn ip_in_cidr(ip: IpAddr, net: IpAddr, prefix: u8) -> bool {
     match (ip, net) {
         (IpAddr::V4(ip), IpAddr::V4(net)) => {
             let mask = if prefix == 0 {
@@ -486,6 +500,31 @@ upstream = "http://127.0.0.1:9080"
         let ip: IpAddr = "10.1.2.3".parse().unwrap();
         assert!(ip_in_allowlist(ip, &["10.0.0.0/8".into()]));
         assert!(!ip_in_allowlist(ip, &["192.168.0.0/16".into()]));
+    }
+
+    #[test]
+    fn allowlist_entry_accepts_hostname() {
+        assert!(is_allowlist_entry("10.0.0.0/8"));
+        assert!(is_allowlist_entry("127.0.0.1"));
+        assert!(is_allowlist_entry("backend.internal"));
+        assert!(is_allowlist_entry("localhost"));
+        assert!(!is_allowlist_entry("bad host!!"));
+        assert!(!is_allowlist_entry(""));
+    }
+
+    #[test]
+    fn allows_hostname_in_upstream_allowlist() {
+        let toml = r#"
+schema_version = 1
+[[routes.hosts]]
+host = "localhost"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://127.0.0.1:9080"
+upstream_allowlist = ["backend.internal", "10.0.0.0/8"]
+upstream_dns_refresh_secs = 30
+"#;
+        parse_toml(toml).expect("hostname pin should validate");
     }
 
     #[test]

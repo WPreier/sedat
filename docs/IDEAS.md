@@ -54,7 +54,7 @@ Durable list of follow-ups after **P10/P11**. Active promotion:
 
 | Item | Notes | Suggested |
 |------|-------|-----------|
-| Upstream pin: Hostname-Literal + periodisches Re-Resolve | Pin by name + refresh DNS on interval | P12.5 |
+| Upstream pin: Hostname-Literal + periodisches Re-Resolve | Pin by name + refresh DNS on interval | **done P12.5** |
 | Request-ID on all early deny paths | Close remaining gaps (pre-hyper 400/431) | **done P11.2** |
 | Hot-reload without process restart | Routes/certs partially done; broaden | partial |
 

@@ -11,8 +11,10 @@ pub struct RouteMatch {
     pub prefix: String,
     /// Upstream base URL.
     pub upstream: String,
-    /// Upstream IP/CIDR pin (empty = unrestricted).
+    /// Upstream IP/CIDR/hostname pin (empty = unrestricted).
     pub upstream_allowlist: Vec<String>,
+    /// DNS re-resolve interval for upstream host + hostname pins (secs; 0 = every connect).
+    pub upstream_dns_refresh_secs: u64,
     /// Optional client cert PEM for upstream mTLS (empty = off).
     pub upstream_mtls_cert: String,
     /// Optional client key PEM for upstream mTLS.
@@ -44,6 +46,7 @@ pub fn resolve_route(routes: &RoutesConfig, host: &str, path: &str) -> Option<Ro
         prefix: p.prefix.clone(),
         upstream: p.upstream.clone(),
         upstream_allowlist: p.upstream_allowlist.clone(),
+        upstream_dns_refresh_secs: p.upstream_dns_refresh_secs,
         upstream_mtls_cert: p.upstream_mtls_cert.clone(),
         upstream_mtls_key: p.upstream_mtls_key.clone(),
         upstream_mtls_ca: p.upstream_mtls_ca.clone(),
