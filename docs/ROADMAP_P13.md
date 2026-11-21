@@ -11,7 +11,7 @@ commit + push/PR, wait for review.
 ```text
 P13.1 E8 HTTP/3 attack corpus   ← done (v0.1.23)
 P13.2 Multiple DNS providers    ← Cloudflare API + webhook (v0.1.24)
-→ continued in [ROADMAP_P14.md](ROADMAP_P14.md); fuller H3 proxy waits on h3-quinn
+→ continued in [ROADMAP_P14.md](ROADMAP_P14.md); fuller H3 proxy done in P14.2
 ```
 
 ## Step breakdown

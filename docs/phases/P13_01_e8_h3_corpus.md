@@ -16,15 +16,15 @@ Success = accept/reject/close without harness **panic** or OOM.
 
 ## Feature / deps
 
-`http3` feature is **Quinn-only**. hyperium `h3-quinn` 0.0.7 does not build
-against quinn 0.11 (`StreamId` field private). The experimental listener already
-used Quinn alone; broken optional crates were removed so
+At P13.1 ship time, `http3` was **Quinn-only** (`h3-quinn` 0.0.7 broke on
+quinn 0.11). **P14.2** re-enabled `h3` + `h3-quinn` 0.0.10 for request proxy;
+this corpus still targets connection/stream caps:
 
 ```bash
 cargo test --features http3 --test h3_attack_corpus
 ```
 
-works in Docker. Without the feature, the binary exposes a single skip test.
+Without the feature, the binary exposes a single skip test.
 
 ## Probes
 

@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.26] – 2026-11-21
+
+### Added
+
+- **P14.2 HTTP/3 request proxy:** feature `http3` now includes hyperium `h3`
+  0.0.8 + `h3-quinn` 0.0.10; QUIC streams resolve requests and run through
+  `proxy::handle_request` (bodies buffered under `max_body_bytes`). Smoke test
+  `tests/h3_proxy.rs`; CI clippy/tests with `--features http3`. Phase note
+  [docs/phases/P14_02_h3_request_proxy.md](docs/phases/P14_02_h3_request_proxy.md).
+
 ## [0.1.25] – 2026-11-21
 
 ### Added

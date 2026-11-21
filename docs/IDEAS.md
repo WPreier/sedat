@@ -57,6 +57,7 @@ Durable list of follow-ups after **P10–P13**. Active promotion:
 | Upstream pin: Hostname-Literal + periodisches Re-Resolve | Pin by name + refresh DNS on interval | **done P12.5** |
 | Request-ID on all early deny paths | Close remaining gaps (pre-hyper 400/431) | **done P11.2** |
 | Hot-reload without process restart | Live limits + static TLS + SIGHUP (P14.1); listen/sandbox/ACME/ban-share still restart | **done P14.1** (partial→broadened) |
+| HTTP/3 full request proxy | `h3` + `h3-quinn` 0.0.10 → `handle_request`; body buffered | **done P14.2** |
 
 ### Won't do (prod)
 

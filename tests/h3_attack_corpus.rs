@@ -75,10 +75,7 @@ mod corpus {
             proxy_protocol: ProxyProtocolConfig::default(),
             limits: limits.clone(),
             embedded_docs: Default::default(),
-            experimental: sedat::config::ExperimentalConfig {
-                h3: true,
-                ..Default::default()
-            },
+            experimental: sedat::config::ExperimentalConfig { h3: true },
             logging: Default::default(),
             hardening: Default::default(),
         };

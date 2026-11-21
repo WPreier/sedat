@@ -26,8 +26,12 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
+      - name: HTTP/3 clippy
+        run: cargo clippy --features http3 --all-targets -- -D warnings
       - name: HTTP/3 attack corpus
         run: cargo test --features http3 --test h3_attack_corpus
+      - name: HTTP/3 request proxy smoke
+        run: cargo test --features http3 --test h3_proxy
       - name: Build release
         run: cargo build --release
 
