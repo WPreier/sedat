@@ -203,6 +203,18 @@ pub fn security_diff(old: &SedatConfig, new: &SedatConfig) -> Vec<SecurityChange
         &old.limits.ban_duration_secs.to_string(),
         &new.limits.ban_duration_secs.to_string(),
     );
+    push(
+        &mut out,
+        "limits.ban_extend_while_banned",
+        &old.limits.ban_extend_while_banned.to_string(),
+        &new.limits.ban_extend_while_banned.to_string(),
+    );
+    push(
+        &mut out,
+        "limits.ban_extend_min_interval_secs",
+        &old.limits.ban_extend_min_interval_secs.to_string(),
+        &new.limits.ban_extend_min_interval_secs.to_string(),
+    );
 
     push(
         &mut out,

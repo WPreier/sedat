@@ -282,6 +282,24 @@ pub async fn handle_request(
                     *strikes,
                 );
             }
+            BanLifecycle::Extended {
+                duration_secs,
+                previous_remaining_secs,
+            } => {
+                warn!(
+                    request_id = rid_ref.unwrap_or("-"),
+                    %peer,
+                    duration_secs,
+                    previous_remaining_secs,
+                    "temporary IP ban extended"
+                );
+                state.audit.emit_ip_ban_extend(
+                    &peer.to_string(),
+                    rid_ref,
+                    *duration_secs,
+                    *previous_remaining_secs,
+                );
+            }
             BanLifecycle::Expired => {
                 info!(
                     request_id = rid_ref.unwrap_or("-"),

@@ -202,7 +202,7 @@ audit_jsonl_max_bytes = 10485760
 
 Events (one JSON object per line): `startup`, `config_reload` (security-diff), `proxy_deny`
 (with `request_id` when available), `proxy_reject` (inbound PROXY policy fail, pre-HTTP),
-`ip_ban` / `ip_unban`, `admin_unban`. Contended writes are dropped
+`ip_ban` / `ip_ban_extend` / `ip_unban`, `admin_unban`. Contended writes are dropped
 (non-blocking; count as `sedat_audit_dropped_total`). See
 [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md),
 [phases/P11_03_proxy_reject_jsonl.md](phases/P11_03_proxy_reject_jsonl.md),
@@ -248,12 +248,21 @@ After consecutive rate-limit denials, SeDat can temporarily ban the client IP:
 [limits]
 ban_after_rate_limit_strikes = 20  # 0 disables
 ban_duration_secs = 60
+ban_extend_while_banned = true     # default: slide TTL on continued hits
+ban_extend_min_interval_secs = 1   # audit throttle; TTL still refreshes every hit
 ```
 
 - While banned: **403** (fail-closed) until TTL expires.
-- Logging: `tracing` warn/info + JSONL `ip_ban` / `ip_unban` (with `request_id` when available).
+- Sliding (P12.2, default on): each request while banned refreshes TTL to
+  `now + ban_duration_secs` (window does not grow beyond that). Set
+  `ban_extend_while_banned = false` for fixed TTL.
+- Logging: `tracing` warn/info + JSONL `ip_ban` / `ip_ban_extend` / `ip_unban`
+  (with `request_id` when available). Extend audits are throttled by
+  `ban_extend_min_interval_secs` (default 1s; `0` = every extend).
 - Admin: `bans` / `unban <ip>` (P11.1) — manual clear audits `admin_unban`.
-- See [phases/P10_03_ip_bans.md](phases/P10_03_ip_bans.md), [phases/P11_01_admin_bans.md](phases/P11_01_admin_bans.md).
+- See [phases/P10_03_ip_bans.md](phases/P10_03_ip_bans.md),
+  [phases/P11_01_admin_bans.md](phases/P11_01_admin_bans.md),
+  [phases/P12_02_sliding_bans.md](phases/P12_02_sliding_bans.md).
 
 ## Firewall
 

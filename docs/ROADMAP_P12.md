@@ -32,8 +32,9 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Extend ban TTL when abuse continues while already banned |
+| **Status** | **done** (v0.1.18) |
+| **Behavior** | Extend ban TTL when abuse continues while already banned (`ban_extend_while_banned`, JSONL `ip_ban_extend`) |
+| **Phase note** | [phases/P12_02_sliding_bans.md](phases/P12_02_sliding_bans.md) |
 
 ### P12.3 – Token rotation without reload
 
@@ -68,7 +69,7 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 | Step | Item | Status |
 |------|------|--------|
 | 1 | Metrics-sidecar token | **done** (v0.1.17) |
-| 2 | Sliding / extending bans | pending |
+| 2 | Sliding / extending bans | **done** (v0.1.18) |
 | 3 | Token rotation w/o reload | pending |
 | 4 | Time-based audit rotate | pending |
 | 5 | Upstream pin re-resolve | pending |

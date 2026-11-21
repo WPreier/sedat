@@ -69,6 +69,8 @@ rate_limit_per_ip = 100
 rate_limit_burst = 20
 ban_after_rate_limit_strikes = 20   # 0 = disable temporary bans
 ban_duration_secs = 60
+ban_extend_while_banned = true      # slide TTL on hits while banned (P12.2)
+ban_extend_min_interval_secs = 1    # audit throttle for ip_ban_extend; 0 = every hit
 
 [embedded_docs]
 enabled = true
@@ -115,6 +117,9 @@ Additional P09 / P10 rules:
 - `logging.request_id_header` must be a valid HTTP token (alphanumeric / `-`).
 - `logging.audit_jsonl` must be empty or a local file path (no URL schemes).
 - `ban_duration_secs` must be `> 0` when `ban_after_rate_limit_strikes > 0`.
+- `ban_extend_while_banned` (default `true`) refreshes ban TTL on each hit while
+  banned; `ban_extend_min_interval_secs` (default `1`) throttles `ip_ban_extend`
+  JSONL (TTL still slides every hit).
 - `server.admin_token` max 512 bytes; `admin_token_file` must be empty or a local path.
 - Admin token precedence: `SEDAT_ADMIN_TOKEN` → `admin_token_file` → `admin_token`.
 - `upstream_allowlist` entries must be valid IPs/CIDRs when set.

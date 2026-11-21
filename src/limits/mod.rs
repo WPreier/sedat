@@ -25,6 +25,8 @@ struct IpLimitState {
     strikes: u32,
     /// Absolute deadline while banned (`None` = not banned).
     banned_until: Option<Instant>,
+    /// Last time an `Extended` audit was emitted (throttle).
+    last_extend_audit: Option<Instant>,
 }
 
 #[derive(Debug)]
@@ -55,6 +57,13 @@ pub enum BanLifecycle {
         duration_secs: u64,
         /// Strike count that triggered the ban.
         strikes: u32,
+    },
+    /// Ban TTL refreshed because the IP kept hitting while banned (P12.2).
+    Extended {
+        /// New TTL window in seconds (`ban_duration_secs` from now).
+        duration_secs: u64,
+        /// Remaining seconds before this extend.
+        previous_remaining_secs: u64,
     },
     /// Previous ban TTL elapsed; IP is clear again.
     Expired,
@@ -120,7 +129,8 @@ impl Limiter {
     /// `limits` is taken from the live config (reload-friendly). When
     /// `ban_after_rate_limit_strikes == 0`, bans are disabled.
     /// Once banned, requests are rejected until `ban_duration_secs` elapses
-    /// (fail-closed).
+    /// (fail-closed). When `ban_extend_while_banned` is true (default), each
+    /// hit while banned refreshes the TTL (sliding window).
     pub fn check_rate(&self, ip: IpAddr, limits: &LimitsConfig) -> RateCheck {
         let rate = f64::from(limits.rate_limit_per_ip);
         let burst = f64::from(limits.rate_limit_burst);
@@ -138,16 +148,36 @@ impl Limiter {
         let now = Instant::now();
         let mut lifecycle = None;
 
-        // Expire ban if TTL passed.
+        // Expire ban if TTL passed; otherwise optionally slide the window.
         if let Some(until) = st.banned_until {
             if now >= until {
                 st.banned_until = None;
                 st.strikes = 0;
+                st.last_extend_audit = None;
                 lifecycle = Some(BanLifecycle::Expired);
             } else {
+                let remaining = until.saturating_duration_since(now).as_secs().max(1);
+                let mut extend_life = None;
+                if limits.ban_extend_while_banned && ban_secs > 0 {
+                    st.banned_until = Some(now + Duration::from_secs(ban_secs));
+                    let interval = limits.ban_extend_min_interval_secs;
+                    let audit_ok = match st.last_extend_audit {
+                        None => true,
+                        Some(t) => {
+                            interval == 0 || now.duration_since(t).as_secs() >= interval
+                        }
+                    };
+                    if audit_ok {
+                        st.last_extend_audit = Some(now);
+                        extend_life = Some(BanLifecycle::Extended {
+                            duration_secs: ban_secs,
+                            previous_remaining_secs: remaining,
+                        });
+                    }
+                }
                 return RateCheck {
                     outcome: RateOutcome::Banned,
-                    lifecycle: None,
+                    lifecycle: extend_life,
                 };
             }
         }
@@ -164,6 +194,7 @@ impl Limiter {
         st.strikes = st.strikes.saturating_add(1);
         if strike_threshold > 0 && ban_secs > 0 && st.strikes >= strike_threshold {
             st.banned_until = Some(now + Duration::from_secs(ban_secs));
+            st.last_extend_audit = None;
             let strikes = st.strikes;
             st.strikes = 0;
             return RateCheck {
@@ -205,6 +236,7 @@ impl Limiter {
             if now >= until {
                 st.banned_until = None;
                 st.strikes = 0;
+                st.last_extend_audit = None;
                 continue;
             }
             out.push(BanEntry {
@@ -230,11 +262,13 @@ impl Limiter {
             Some(until) if now < until => {
                 st.banned_until = None;
                 st.strikes = 0;
+                st.last_extend_audit = None;
                 true
             }
             Some(_) => {
                 st.banned_until = None;
                 st.strikes = 0;
+                st.last_extend_audit = None;
                 false
             }
             None => false,
@@ -283,6 +317,7 @@ impl IpLimitState {
             bucket: TokenBucket::new(rate, burst),
             strikes: 0,
             banned_until: None,
+            last_extend_audit: None,
         }
     }
 }
@@ -383,10 +418,16 @@ mod tests {
         ));
         assert!(lim.is_banned(ip));
 
-        // Still banned without new lifecycle
+        // Still banned; default sliding extend emits Extended
         let still = lim.check_rate(ip, &cfg);
         assert_eq!(still.outcome, RateOutcome::Banned);
-        assert!(still.lifecycle.is_none());
+        assert!(matches!(
+            still.lifecycle,
+            Some(BanLifecycle::Extended {
+                duration_secs: 2,
+                ..
+            })
+        ));
 
         thread::sleep(Duration::from_millis(2100));
         let after = lim.check_rate(ip, &cfg);
@@ -396,6 +437,62 @@ mod tests {
             Some(BanLifecycle::Expired)
         ));
         assert!(!lim.is_banned(ip));
+    }
+
+    #[test]
+    fn sliding_ban_extends_ttl() {
+        let cfg = LimitsConfig {
+            rate_limit_per_ip: 1,
+            rate_limit_burst: 1,
+            ban_after_rate_limit_strikes: 2,
+            ban_duration_secs: 1,
+            ban_extend_while_banned: true,
+            ban_extend_min_interval_secs: 0,
+            ..Default::default()
+        };
+        let lim = Limiter::new(cfg.clone());
+        let ip: IpAddr = "203.0.113.50".parse().unwrap();
+
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Allow);
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::RateLimited);
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Banned);
+
+        // Without extend, 1s ban would expire after ~1100ms; keep hitting so it slides.
+        for _ in 0..4 {
+            thread::sleep(Duration::from_millis(400));
+            let r = lim.check_rate(ip, &cfg);
+            assert_eq!(r.outcome, RateOutcome::Banned);
+            assert!(matches!(r.lifecycle, Some(BanLifecycle::Extended { .. })));
+        }
+        assert!(lim.is_banned(ip));
+
+        // Stop hitting; TTL from last extend (~1s) elapses.
+        thread::sleep(Duration::from_millis(1100));
+        let after = lim.check_rate(ip, &cfg);
+        assert!(matches!(after.lifecycle, Some(BanLifecycle::Expired)));
+        assert!(!lim.is_banned(ip));
+    }
+
+    #[test]
+    fn sliding_ban_disabled_keeps_fixed_ttl() {
+        let cfg = LimitsConfig {
+            rate_limit_per_ip: 1,
+            rate_limit_burst: 1,
+            ban_after_rate_limit_strikes: 2,
+            ban_duration_secs: 2,
+            ban_extend_while_banned: false,
+            ..Default::default()
+        };
+        let lim = Limiter::new(cfg.clone());
+        let ip: IpAddr = "203.0.113.51".parse().unwrap();
+
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Allow);
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::RateLimited);
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Banned);
+
+        let still = lim.check_rate(ip, &cfg);
+        assert_eq!(still.outcome, RateOutcome::Banned);
+        assert!(still.lifecycle.is_none());
     }
 
     #[test]

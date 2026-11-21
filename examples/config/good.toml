@@ -48,6 +48,8 @@ rate_limit_per_ip = 100
 rate_limit_burst = 20
 ban_after_rate_limit_strikes = 20
 ban_duration_secs = 60
+ban_extend_while_banned = true
+ban_extend_min_interval_secs = 1
 
 [embedded_docs]
 enabled = true

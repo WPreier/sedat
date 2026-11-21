@@ -46,6 +46,8 @@ fn test_config(audit_path: &str) -> SedatConfig {
             rate_limit_burst: 1,
             ban_after_rate_limit_strikes: 2,
             ban_duration_secs: 60,
+            ban_extend_while_banned: true,
+            ban_extend_min_interval_secs: 0, // audit every extend in test
             ..Default::default()
         },
         embedded_docs: {
@@ -110,7 +112,7 @@ async fn bans_after_rate_limit_series_and_audits() {
     assert_eq!(hit(addr, "rl-1").await, StatusCode::TOO_MANY_REQUESTS);
     // 3) strike 2 → ban → 403
     assert_eq!(hit(addr, "ban-trigger").await, StatusCode::FORBIDDEN);
-    // 4) still banned
+    // 4) still banned → sliding extend
     assert_eq!(hit(addr, "still-banned").await, StatusCode::FORBIDDEN);
 
     let text = std::fs::read_to_string(&audit_path).unwrap();
@@ -121,6 +123,14 @@ async fn bans_after_rate_limit_series_and_audits() {
     assert!(
         text.contains("\"request_id\":\"ban-trigger\""),
         "missing ban request_id: {text}"
+    );
+    assert!(
+        text.contains("\"event\":\"ip_ban_extend\""),
+        "missing ip_ban_extend: {text}"
+    );
+    assert!(
+        text.contains("\"request_id\":\"still-banned\""),
+        "missing extend request_id: {text}"
     );
     assert!(
         text.contains("\"reason\":\"ip_banned\""),
