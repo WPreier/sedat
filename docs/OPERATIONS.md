@@ -266,6 +266,9 @@ ban_extend_min_interval_secs = 1   # audit throttle; TTL still refreshes every h
   (with `request_id` when available). Extend audits are throttled by
   `ban_extend_min_interval_secs` (default 1s; `0` = every extend).
 - Admin: `bans` / `unban <ip>` (P11.1) — manual clear audits `admin_unban`.
+- **Replica share (P12.6, optional):** set `ban_share_path` +
+  `SEDAT_BAN_SHARE_SECRET` (or secret file) on a shared volume; max expiry wins;
+  unban tombstones. See [phases/P12_06_shared_ban_state.md](phases/P12_06_shared_ban_state.md).
 - See [phases/P10_03_ip_bans.md](phases/P10_03_ip_bans.md),
   [phases/P11_01_admin_bans.md](phases/P11_01_admin_bans.md),
   [phases/P12_02_sliding_bans.md](phases/P12_02_sliding_bans.md).

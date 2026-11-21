@@ -385,6 +385,19 @@ pub struct LimitsConfig {
     /// refreshes every hit when extend is on). Default **1**; `0` = audit every extend.
     #[serde(default = "default_ban_extend_min_interval")]
     pub ban_extend_min_interval_secs: u64,
+    /// Shared ban map path across replicas (empty = **off**, default). P12.6.
+    /// When set, a share secret is **required** (fail-closed).
+    #[serde(default)]
+    pub ban_share_path: String,
+    /// Inline HMAC secret for `ban_share_path` (prefer env / file).
+    #[serde(default)]
+    pub ban_share_secret: String,
+    /// Path to file containing the ban-share HMAC secret (trimmed).
+    #[serde(default)]
+    pub ban_share_secret_file: String,
+    /// How often to pull the shared ban file (seconds). Default **2**; `0` → 1.
+    #[serde(default = "default_ban_share_poll")]
+    pub ban_share_poll_secs: u64,
     /// Separate max concurrent HTTP/3 connections (when enabled).
     #[serde(default = "default_h3_conn")]
     pub max_h3_connections: usize,
@@ -426,6 +439,9 @@ fn default_ban_duration() -> u64 {
 fn default_ban_extend_min_interval() -> u64 {
     1
 }
+fn default_ban_share_poll() -> u64 {
+    2
+}
 fn default_h3_conn() -> usize {
     512
 }
@@ -448,6 +464,10 @@ impl Default for LimitsConfig {
             ban_duration_secs: default_ban_duration(),
             ban_extend_while_banned: true,
             ban_extend_min_interval_secs: default_ban_extend_min_interval(),
+            ban_share_path: String::new(),
+            ban_share_secret: String::new(),
+            ban_share_secret_file: String::new(),
+            ban_share_poll_secs: default_ban_share_poll(),
             max_h3_connections: default_h3_conn(),
             max_h3_streams: default_h3_streams(),
         }

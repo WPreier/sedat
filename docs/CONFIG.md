@@ -73,6 +73,9 @@ ban_after_rate_limit_strikes = 20   # 0 = disable temporary bans
 ban_duration_secs = 60
 ban_extend_while_banned = true      # slide TTL on hits while banned (P12.2)
 ban_extend_min_interval_secs = 1    # audit throttle for ip_ban_extend; 0 = every hit
+# ban_share_path = "./state/shared_bans.json"  # P12.6 replica share; empty = off
+# ban_share_secret_file = "./state/ban_share.secret"  # or SEDAT_BAN_SHARE_SECRET
+# ban_share_poll_secs = 2
 
 [embedded_docs]
 enabled = true
@@ -124,6 +127,9 @@ Additional P09 / P10 rules:
 - `ban_extend_while_banned` (default `true`) refreshes ban TTL on each hit while
   banned; `ban_extend_min_interval_secs` (default `1`) throttles `ip_ban_extend`
   JSONL (TTL still slides every hit).
+- `ban_share_path` (default empty = off) enables file-backed replica ban sync;
+  requires `SEDAT_BAN_SHARE_SECRET` / `ban_share_secret_file` / `ban_share_secret`
+  (fail-closed).
 - `server.admin_token` max 512 bytes; `admin_token_file` must be empty or a local path.
 - Admin token precedence: `SEDAT_ADMIN_TOKEN` → `admin_token_file` → `admin_token`.
 - Live token gate (P12.3): admin `reload-token` refreshes without full process

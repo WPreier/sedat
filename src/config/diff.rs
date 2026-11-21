@@ -221,6 +221,30 @@ pub fn security_diff(old: &SedatConfig, new: &SedatConfig) -> Vec<SecurityChange
         &old.limits.ban_extend_min_interval_secs.to_string(),
         &new.limits.ban_extend_min_interval_secs.to_string(),
     );
+    push(
+        &mut out,
+        "limits.ban_share_path",
+        &old.limits.ban_share_path,
+        &new.limits.ban_share_path,
+    );
+    push(
+        &mut out,
+        "limits.ban_share_secret_set",
+        &(!old.limits.ban_share_secret.trim().is_empty()).to_string(),
+        &(!new.limits.ban_share_secret.trim().is_empty()).to_string(),
+    );
+    push(
+        &mut out,
+        "limits.ban_share_secret_file",
+        &old.limits.ban_share_secret_file,
+        &new.limits.ban_share_secret_file,
+    );
+    push(
+        &mut out,
+        "limits.ban_share_poll_secs",
+        &old.limits.ban_share_poll_secs.to_string(),
+        &new.limits.ban_share_poll_secs.to_string(),
+    );
 
     push(
         &mut out,

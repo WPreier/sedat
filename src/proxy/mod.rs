@@ -78,7 +78,17 @@ impl ProxyState {
 
     /// Build with an explicit audit sink (shared with admin).
     pub fn with_audit(config: SedatConfig, audit: AuditSink) -> Self {
-        let limiter = Limiter::new(config.limits.clone());
+        let share = match crate::limits::BanShareStore::try_from_limits(&config.limits) {
+            Ok(s) => s,
+            Err(e) => {
+                warn!(error = %e, "ban share disabled (config)");
+                None
+            }
+        };
+        if let Some(ref s) = share {
+            info!(path = %s.path().display(), "ban share enabled (P12.6)");
+        }
+        let limiter = Limiter::new_with_share(config.limits.clone(), share);
         Self {
             config: Arc::new(ArcSwap::from_pointee(config)),
             limiter,

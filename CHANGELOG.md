@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.22] – 2026-11-21
+
+### Added
+
+- **P12.6 Shared ban state:** optional file-backed HMAC JSON map
+  (`limits.ban_share_path` + `SEDAT_BAN_SHARE_SECRET` / secret file); max expiry
+  wins; unban tombstones; disabled by default; fail-closed without secret.
+  **P12 complete.** Phase note
+  [docs/phases/P12_06_shared_ban_state.md](docs/phases/P12_06_shared_ban_state.md).
+
 ## [0.1.21] – 2026-11-21
 
 ### Added

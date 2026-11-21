@@ -367,6 +367,38 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
             "limits.ban_duration_secs must be > 0 when ban_after_rate_limit_strikes > 0",
         ));
     }
+    if !crate::audit::valid_audit_path(&cfg.limits.ban_share_path) {
+        return Err(err(
+            find_line(source, &cfg.limits.ban_share_path),
+            "limits.ban_share_path must be empty or a local file path",
+        ));
+    }
+    if !crate::audit::valid_audit_path(&cfg.limits.ban_share_secret_file) {
+        return Err(err(
+            find_line(source, &cfg.limits.ban_share_secret_file),
+            "limits.ban_share_secret_file must be empty or a local file path",
+        ));
+    }
+    if !cfg.limits.ban_share_path.trim().is_empty() {
+        // Fail-closed: path requires a secret from env / file / inline.
+        let env_ok = std::env::var("SEDAT_BAN_SHARE_SECRET")
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false);
+        let file_ok = {
+            let f = cfg.limits.ban_share_secret_file.trim();
+            !f.is_empty()
+                && std::fs::read_to_string(f)
+                    .map(|c| !c.trim().is_empty())
+                    .unwrap_or(false)
+        };
+        let inline_ok = !cfg.limits.ban_share_secret.trim().is_empty();
+        if !env_ok && !file_ok && !inline_ok {
+            return Err(err(
+                find_line(source, "ban_share_path"),
+                "limits.ban_share_path requires SEDAT_BAN_SHARE_SECRET, ban_share_secret_file, or ban_share_secret (fail-closed)",
+            ));
+        }
+    }
     if cfg.experimental.h3 && !cfg!(feature = "http3") {
         // Allow config parse; runtime will warn and refuse to enable.
     }

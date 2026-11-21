@@ -1,5 +1,11 @@
 //! Connection, rate, size limits, and temporary IP bans.
 
+mod ban_share;
+
+pub use ban_share::{
+    instant_to_system, system_to_instant, BanShareStore, SharedBanView, BAN_SHARE_SECRET_ENV,
+};
+
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -7,6 +13,7 @@ use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use parking_lot::Mutex;
+use tracing::warn;
 
 use crate::config::LimitsConfig;
 
@@ -16,6 +23,8 @@ pub struct Limiter {
     cfg: LimitsConfig,
     active: AtomicUsize,
     ips: DashMap<IpAddr, Mutex<IpLimitState>>,
+    /// Optional file-backed replica ban share (P12.6).
+    share: Option<Arc<BanShareStore>>,
 }
 
 #[derive(Debug)]
@@ -88,13 +97,25 @@ pub struct BanEntry {
 }
 
 impl Limiter {
-    /// Create from config.
+    /// Create from config (no ban share).
     pub fn new(cfg: LimitsConfig) -> Arc<Self> {
+        Self::new_with_share(cfg, None)
+    }
+
+    /// Create with optional shared ban store (P12.6).
+    pub fn new_with_share(cfg: LimitsConfig, share: Option<Arc<BanShareStore>>) -> Arc<Self> {
         Arc::new(Self {
             cfg,
             active: AtomicUsize::new(0),
             ips: DashMap::new(),
+            share,
         })
+    }
+
+    /// Whether a shared ban file is configured.
+    #[must_use]
+    pub fn ban_share_enabled(&self) -> bool {
+        self.share.is_some()
     }
 
     /// Try to accept a new connection. Returns `false` if at capacity.
@@ -132,6 +153,8 @@ impl Limiter {
     /// (fail-closed). When `ban_extend_while_banned` is true (default), each
     /// hit while banned refreshes the TTL (sliding window).
     pub fn check_rate(&self, ip: IpAddr, limits: &LimitsConfig) -> RateCheck {
+        self.maybe_pull_share();
+
         let rate = f64::from(limits.rate_limit_per_ip);
         let burst = f64::from(limits.rate_limit_burst);
         let strike_threshold = limits.ban_after_rate_limit_strikes;
@@ -159,7 +182,9 @@ impl Limiter {
                 let remaining = until.saturating_duration_since(now).as_secs().max(1);
                 let mut extend_life = None;
                 if limits.ban_extend_while_banned && ban_secs > 0 {
-                    st.banned_until = Some(now + Duration::from_secs(ban_secs));
+                    let new_until = now + Duration::from_secs(ban_secs);
+                    st.banned_until = Some(new_until);
+                    self.publish_ban_share(ip, new_until);
                     let interval = limits.ban_extend_min_interval_secs;
                     let audit_ok = match st.last_extend_audit {
                         None => true,
@@ -193,10 +218,13 @@ impl Limiter {
         // Token bucket empty → strike.
         st.strikes = st.strikes.saturating_add(1);
         if strike_threshold > 0 && ban_secs > 0 && st.strikes >= strike_threshold {
-            st.banned_until = Some(now + Duration::from_secs(ban_secs));
+            let new_until = now + Duration::from_secs(ban_secs);
+            st.banned_until = Some(new_until);
             st.last_extend_audit = None;
             let strikes = st.strikes;
             st.strikes = 0;
+            drop(st);
+            self.publish_ban_share(ip, new_until);
             return RateCheck {
                 outcome: RateOutcome::Banned,
                 lifecycle: Some(BanLifecycle::Applied {
@@ -254,11 +282,13 @@ impl Limiter {
     /// (no active ban to lift).
     pub fn unban(&self, ip: IpAddr) -> bool {
         let Some(entry) = self.ips.get(&ip) else {
+            // Still publish tombstone so replicas clear.
+            self.publish_unban_share(ip);
             return false;
         };
         let mut st = entry.lock();
         let now = Instant::now();
-        match st.banned_until {
+        let cleared = match st.banned_until {
             Some(until) if now < until => {
                 st.banned_until = None;
                 st.strikes = 0;
@@ -272,6 +302,90 @@ impl Limiter {
                 false
             }
             None => false,
+        };
+        drop(st);
+        self.publish_unban_share(ip);
+        cleared
+    }
+
+    /// Pull shared bans into local state (throttled via store poll interval).
+    pub fn sync_ban_share(&self) {
+        self.pull_share_now();
+    }
+
+    fn maybe_pull_share(&self) {
+        let Some(share) = &self.share else {
+            return;
+        };
+        if share.should_pull() {
+            self.pull_share_now();
+        }
+    }
+
+    fn pull_share_now(&self) {
+        let Some(share) = &self.share else {
+            return;
+        };
+        match share.pull() {
+            Ok(views) => {
+                for v in views {
+                    self.apply_shared_view(v);
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "ban share pull failed (local state unchanged)");
+            }
+        }
+    }
+
+    fn apply_shared_view(&self, view: SharedBanView) {
+        let rate = f64::from(self.cfg.rate_limit_per_ip);
+        let burst = f64::from(self.cfg.rate_limit_burst);
+        let entry = self
+            .ips
+            .entry(view.ip)
+            .or_insert_with(|| Mutex::new(IpLimitState::new(rate, burst)));
+        let mut st = entry.lock();
+        match view.until {
+            None => {
+                st.banned_until = None;
+                st.strikes = 0;
+                st.last_extend_audit = None;
+            }
+            Some(until_sys) => {
+                let until_i = system_to_instant(until_sys);
+                let now = Instant::now();
+                if until_i <= now {
+                    st.banned_until = None;
+                    st.strikes = 0;
+                    st.last_extend_audit = None;
+                    return;
+                }
+                match st.banned_until {
+                    Some(local) if local >= until_i => {}
+                    _ => {
+                        st.banned_until = Some(until_i);
+                    }
+                }
+            }
+        }
+    }
+
+    fn publish_ban_share(&self, ip: IpAddr, until: Instant) {
+        let Some(share) = &self.share else {
+            return;
+        };
+        if let Err(e) = share.publish_ban(ip, instant_to_system(until)) {
+            warn!(error = %e, %ip, "ban share publish_ban failed");
+        }
+    }
+
+    fn publish_unban_share(&self, ip: IpAddr) {
+        let Some(share) = &self.share else {
+            return;
+        };
+        if let Err(e) = share.publish_unban(ip) {
+            warn!(error = %e, %ip, "ban share publish_unban failed");
         }
     }
 
@@ -557,5 +671,42 @@ mod tests {
         drop(g1);
         assert!(ConnectionGuard::acquire(lim).is_some());
         drop(g2);
+    }
+
+    #[test]
+    fn shared_ban_propagates_between_limiters() {
+        std::env::remove_var(BAN_SHARE_SECRET_ENV);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bans.json");
+        let secret = "replica-share-secret-test!!";
+        let base = LimitsConfig {
+            rate_limit_per_ip: 1,
+            rate_limit_burst: 1,
+            ban_after_rate_limit_strikes: 2,
+            ban_duration_secs: 60,
+            ban_extend_while_banned: false,
+            ban_share_path: path.to_string_lossy().into(),
+            ban_share_secret: secret.into(),
+            ban_share_poll_secs: 1,
+            ..Default::default()
+        };
+        let share_a = BanShareStore::try_from_limits(&base).unwrap().unwrap();
+        let share_b = BanShareStore::try_from_limits(&base).unwrap().unwrap();
+        let a = Limiter::new_with_share(base.clone(), Some(share_a));
+        let b = Limiter::new_with_share(base.clone(), Some(share_b));
+        let ip: IpAddr = "203.0.113.77".parse().unwrap();
+
+        assert_eq!(a.check_rate(ip, &base).outcome, RateOutcome::Allow);
+        assert_eq!(a.check_rate(ip, &base).outcome, RateOutcome::RateLimited);
+        assert_eq!(a.check_rate(ip, &base).outcome, RateOutcome::Banned);
+        assert!(a.is_banned(ip));
+        assert!(!b.is_banned(ip));
+
+        b.sync_ban_share();
+        assert!(b.is_banned(ip), "replica B should see shared ban");
+
+        assert!(b.unban(ip));
+        a.sync_ban_share();
+        assert!(!a.is_banned(ip), "replica A should see shared unban");
     }
 }
