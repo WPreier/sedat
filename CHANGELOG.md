@@ -5,6 +5,14 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.33] – 2026-11-22
+
+### Changed
+
+- **P15.2 instant-acme 0.8:** upgrade so `Challenge.token` is optional (newer
+  Pebble `dns-persist-01` omits it). Unpin Compose Pebble to `:latest`. Phase note
+  [docs/phases/P15_02_instant_acme_token.md](docs/phases/P15_02_instant_acme_token.md).
+
 ## [0.1.32] – 2026-11-21
 
 ### Fixed

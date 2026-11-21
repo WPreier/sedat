@@ -1,83 +1,51 @@
 //! HTTP clients for ACME (Pebble tolerates private CA via custom verifier).
 
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use http::Request;
-use http_body_util::Full;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client as HyperClient;
 use hyper_util::rt::TokioExecutor;
-use instant_acme::{BytesResponse, Error as AcmeError, HttpClient};
+use instant_acme::{BodyWrapper, HttpClient};
 
 /// Build an ACME HTTP client. For Pebble (private CA), TLS verification is relaxed.
+///
+/// `instant-acme` 0.8's Hyper client impl already sets User-Agent; we only need a
+/// TLS stack that accepts Pebble's private CA.
 pub fn acme_http_client(directory: &str) -> Result<Box<dyn HttpClient>, String> {
     if directory.contains("14000") || directory.contains("pebble") {
-        Ok(Box::new(PebbleClient::try_new()?))
+        Ok(Box::new(pebble_hyper_client()?))
     } else {
-        // Use instant-acme default path via Account::create (native roots).
-        // Callers should use Account::create for non-Pebble; this is only for create_with_http.
-        Ok(Box::new(PebbleClient::try_new_secure()?))
+        Ok(Box::new(secure_hyper_client()?))
     }
 }
 
-struct PebbleClient(HyperClient<hyper_rustls::HttpsConnector<HttpConnector>, Full<Bytes>>);
-
-impl PebbleClient {
-    fn try_new() -> Result<Self, String> {
-        crate::tls::ensure_crypto_provider();
-        let tls = rustls::ClientConfig::builder()
-            .dangerous()
-            .with_custom_certificate_verifier(Arc::new(NoVerifier))
-            .with_no_client_auth();
-        let https = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_tls_config(tls)
-            .https_or_http()
-            .enable_http1()
-            .enable_http2()
-            .build();
-        Ok(Self(
-            HyperClient::builder(TokioExecutor::new()).build(https),
-        ))
-    }
-
-    fn try_new_secure() -> Result<Self, String> {
-        let https = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .map_err(|e| e.to_string())?
-            .https_only()
-            .enable_http1()
-            .enable_http2()
-            .build();
-        Ok(Self(
-            HyperClient::builder(TokioExecutor::new()).build(https),
-        ))
-    }
+fn pebble_hyper_client(
+) -> Result<HyperClient<hyper_rustls::HttpsConnector<HttpConnector>, BodyWrapper<Bytes>>, String> {
+    crate::tls::ensure_crypto_provider();
+    let tls = rustls::ClientConfig::builder()
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(NoVerifier))
+        .with_no_client_auth();
+    let https = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_tls_config(tls)
+        .https_or_http()
+        .enable_http1()
+        .enable_http2()
+        .build();
+    Ok(HyperClient::builder(TokioExecutor::new()).build(https))
 }
 
-impl HttpClient for PebbleClient {
-    fn request(
-        &self,
-        mut req: Request<Full<Bytes>>,
-    ) -> Pin<Box<dyn Future<Output = Result<BytesResponse, AcmeError>> + Send>> {
-        // Newer Pebble rejects requests without User-Agent (returns a problem
-        // document that then fails DirectoryUrls deserialization as "missing newNonce").
-        if !req.headers().contains_key(http::header::USER_AGENT) {
-            req.headers_mut().insert(
-                http::header::USER_AGENT,
-                http::HeaderValue::from_static("sedat-acme/0.1"),
-            );
-        }
-        let fut = self.0.request(req);
-        Box::pin(async move {
-            match fut.await {
-                Ok(rsp) => Ok(BytesResponse::from(rsp)),
-                Err(e) => Err(AcmeError::Other(Box::new(e))),
-            }
-        })
-    }
+fn secure_hyper_client(
+) -> Result<HyperClient<hyper_rustls::HttpsConnector<HttpConnector>, BodyWrapper<Bytes>>, String> {
+    let https = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .map_err(|e| e.to_string())?
+        .https_only()
+        .enable_http1()
+        .enable_http2()
+        .build();
+    Ok(HyperClient::builder(TokioExecutor::new()).build(https))
 }
 
 #[derive(Debug)]

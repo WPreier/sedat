@@ -1,7 +1,7 @@
 //! ACME Renewal Information (ARI / RFC 9773) helpers.
 //!
-//! Implemented without upgrading `instant-acme` (still 0.7): directory + renewalInfo
-//! are plain HTTP GETs (no JWS). When the CA has no `renewalInfo`, callers fall back
+//! ARI is fetched with plain HTTP GETs (no JWS), independent of the
+//! `instant-acme` order path. When the CA has no `renewalInfo`, callers fall back
 //! to `notAfter − renew_days_before`.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

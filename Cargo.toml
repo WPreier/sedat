@@ -1,6 +1,6 @@
 [package]
 name = "sedat"
-version = "0.1.32"
+version = "0.1.33"
 edition = "2021"
 rust-version = "1.75"
 description = "Minimal, high-security reverse proxy (companion to Seda)"
@@ -32,8 +32,8 @@ rustls-pemfile = "2.2"
 rustls-pki-types = "1.11"
 webpki-roots = "0.26"
 
-# ACME
-instant-acme = "0.7"
+# ACME (0.8+: Challenge.token optional — newer Pebble omits token on some challenges)
+instant-acme = { version = "0.8", default-features = false, features = ["hyper-rustls", "ring"] }
 rcgen = "0.13"
 hyper-rustls = { version = "0.27", features = ["http1", "http2", "ring", "tls12", "native-tokio"] }
 
