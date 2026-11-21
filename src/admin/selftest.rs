@@ -577,6 +577,7 @@ mod tests {
             config: Arc::new(ArcSwap::from_pointee(cfg)),
             tokens,
             limiter: Limiter::new(Default::default()),
+            tls: None,
             acme_status: None,
             audit: AuditSink::disabled(),
             started_at: now_start(),

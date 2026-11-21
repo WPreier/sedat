@@ -20,10 +20,12 @@ use crate::config::LimitsConfig;
 /// Shared limiter state for the process.
 #[derive(Debug)]
 pub struct Limiter {
-    cfg: LimitsConfig,
+    /// Live edge limits (updated on admin/SIGHUP reload — P14.1).
+    cfg: Mutex<LimitsConfig>,
     active: AtomicUsize,
     ips: DashMap<IpAddr, Mutex<IpLimitState>>,
     /// Optional file-backed replica ban share (P12.6).
+    /// Path/secret changes still require process restart.
     share: Option<Arc<BanShareStore>>,
 }
 
@@ -105,11 +107,25 @@ impl Limiter {
     /// Create with optional shared ban store (P12.6).
     pub fn new_with_share(cfg: LimitsConfig, share: Option<Arc<BanShareStore>>) -> Arc<Self> {
         Arc::new(Self {
-            cfg,
+            cfg: Mutex::new(cfg),
             active: AtomicUsize::new(0),
             ips: DashMap::new(),
             share,
         })
+    }
+
+    /// Replace live limit knobs after a successful config reload (P14.1).
+    ///
+    /// Does not rebuild the ban-share file store — enabling/changing
+    /// `ban_share_path` / secret still needs a process restart.
+    pub fn reconfigure(&self, cfg: LimitsConfig) {
+        *self.cfg.lock() = cfg;
+    }
+
+    /// Snapshot of the live limits (for tests / status).
+    #[must_use]
+    pub fn limits_snapshot(&self) -> LimitsConfig {
+        self.cfg.lock().clone()
     }
 
     /// Whether a shared ban file is configured.
@@ -120,9 +136,10 @@ impl Limiter {
 
     /// Try to accept a new connection. Returns `false` if at capacity.
     pub fn try_acquire_connection(&self) -> bool {
+        let max = self.cfg.lock().max_connections;
         let mut cur = self.active.load(Ordering::Relaxed);
         loop {
-            if cur >= self.cfg.max_connections {
+            if cur >= max {
                 return false;
             }
             match self
@@ -336,8 +353,13 @@ impl Limiter {
     }
 
     fn apply_shared_view(&self, view: SharedBanView) {
-        let rate = f64::from(self.cfg.rate_limit_per_ip);
-        let burst = f64::from(self.cfg.rate_limit_burst);
+        let (rate, burst) = {
+            let c = self.cfg.lock();
+            (
+                f64::from(c.rate_limit_per_ip),
+                f64::from(c.rate_limit_burst),
+            )
+        };
         let entry = self
             .ips
             .entry(view.ip)
@@ -388,37 +410,37 @@ impl Limiter {
 
     /// Configured header byte limit.
     pub fn max_header_bytes(&self) -> usize {
-        self.cfg.max_header_bytes
+        self.cfg.lock().max_header_bytes
     }
 
     /// Configured header count limit.
     pub fn max_headers(&self) -> usize {
-        self.cfg.max_headers
+        self.cfg.lock().max_headers
     }
 
     /// Configured body limit.
     pub fn max_body_bytes(&self) -> usize {
-        self.cfg.max_body_bytes
+        self.cfg.lock().max_body_bytes
     }
 
     /// Request timeout.
     pub fn request_timeout(&self) -> Duration {
-        Duration::from_secs(self.cfg.request_timeout_secs)
+        Duration::from_secs(self.cfg.lock().request_timeout_secs)
     }
 
     /// Idle timeout.
     pub fn idle_timeout(&self) -> Duration {
-        Duration::from_secs(self.cfg.idle_timeout_secs)
+        Duration::from_secs(self.cfg.lock().idle_timeout_secs)
     }
 
     /// HTTP/3 connection limit.
     pub fn max_h3_connections(&self) -> usize {
-        self.cfg.max_h3_connections
+        self.cfg.lock().max_h3_connections
     }
 
     /// HTTP/3 stream limit.
     pub fn max_h3_streams(&self) -> usize {
-        self.cfg.max_h3_streams
+        self.cfg.lock().max_h3_streams
     }
 }
 
@@ -498,6 +520,24 @@ mod tests {
         assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Allow);
         assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Allow);
         assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::RateLimited);
+    }
+
+    #[test]
+    fn reconfigure_updates_connection_cap() {
+        let lim = Limiter::new(LimitsConfig {
+            max_connections: 1,
+            ..Default::default()
+        });
+        let g1 = ConnectionGuard::acquire(lim.clone()).expect("first slot");
+        assert!(ConnectionGuard::acquire(lim.clone()).is_none());
+        lim.reconfigure(LimitsConfig {
+            max_connections: 2,
+            ..Default::default()
+        });
+        assert_eq!(lim.limits_snapshot().max_connections, 2);
+        let g2 = ConnectionGuard::acquire(lim.clone()).expect("second slot after reconfigure");
+        assert!(ConnectionGuard::acquire(lim.clone()).is_none());
+        drop((g1, g2));
     }
 
     #[test]
