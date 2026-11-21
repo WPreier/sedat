@@ -1,7 +1,7 @@
 # SeDat – Roadmap P12 (post-P11 backlog)
 
 Follow-ups from [IDEAS.md](IDEAS.md) after **P11 complete** (v0.1.16).
-**E8** stays later (large); **E9** stays rejected.
+**E8** moved to [ROADMAP_P13.md](ROADMAP_P13.md); **E9** stays rejected.
 
 Implement as **separate steps**; after each: Zwischenfazit, verify, patch bump,
 commit + push/PR, wait for review.
@@ -15,7 +15,7 @@ P12.3 Token rotation w/o reload ← hot-swap admin (and metrics) token
 P12.4 Time-based audit rotate   ← age rotate beside size rotate
 P12.5 Upstream pin re-resolve   ← hostname literal + periodic DNS refresh
 P12.6 Shared ban state (replicas) ← multi-instance (larger)
-… later: E8 H3 corpus, multiple DNS providers …
+→ continued in [ROADMAP_P13.md](ROADMAP_P13.md)
 ```
 
 ## Step breakdown
@@ -82,4 +82,4 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 ## P12 complete
 
 All planned P12 steps are shipped (v0.1.17–v0.1.22). Later backlog remains in
-[IDEAS.md](IDEAS.md) (e.g. **E8** H3 corpus, multiple DNS providers).
+[ROADMAP_P13.md](ROADMAP_P13.md) / [IDEAS.md](IDEAS.md).

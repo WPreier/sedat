@@ -34,12 +34,16 @@ pub async fn serve_http3(
 
         let active = Arc::new(AtomicUsize::new(0));
         let (cert_pem, key_pem) = crate::tls::generate_self_signed("localhost")?;
-        let server_crypto = crate::tls::server_config_from_pem(&cert_pem, &key_pem)?;
+        let mut server_crypto = crate::tls::server_config_from_pem(&cert_pem, &key_pem)?;
+        // QUIC / H3 ALPN (TCP HTTPS keeps h2/http1.1 on the TLS path).
+        server_crypto.alpn_protocols = vec![b"h3".to_vec()];
         let quic_cfg = quinn::crypto::rustls::QuicServerConfig::try_from(server_crypto)
             .map_err(|e| std::io::Error::other(format!("{e}")))?;
         let mut server_cfg = quinn::ServerConfig::with_crypto(Arc::new(quic_cfg));
         if let Some(transport) = Arc::get_mut(&mut server_cfg.transport) {
             transport.max_concurrent_bidi_streams((limits.max_h3_streams() as u32).into());
+            // Keep experimental listener bounded under flood tests.
+            transport.max_concurrent_uni_streams(32u32.into());
         }
 
         let endpoint = Endpoint::server(server_cfg, addr)?;
