@@ -13,7 +13,7 @@ The old `-dnsserver 10.30.50.3:8053` also pointed at a non-existent host; with
 |--------|--------|
 | Compose `pebble.command` | `["-config", "/test/config/pebble-config.json"]` |
 | CI wait loop | Fail fast if container exits; dump `ps` + logs on timeout |
-| Compose `pebble-issue` | Explicit `PATH` + `entrypoint: bash -lc`; script `scripts/compose_pebble_issue.sh` (`command -v cargo`) |
+| Compose `pebble-issue` | Explicit `PATH` + `entrypoint: bash` + `scripts/compose_pebble_issue.sh` |
 | CI job soft-fail | `continue-on-error: true` so residual flakes do not block merges |
 | Docs | OPERATIONS + this phase note |
 

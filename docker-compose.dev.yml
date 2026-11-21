@@ -55,7 +55,7 @@ services:
     profiles: ["acme"]
 
   # Optional one-shot issuance against the pebble service (profile acme).
-  # Uses official rust image PATH (`/usr/local/cargo/bin`); do not override entrypoint.
+  # Keeps rust image cargo on PATH; script avoids Compose `$` interpolation traps.
   pebble-issue:
     image: rust:latest
     working_dir: /src
@@ -70,7 +70,7 @@ services:
       CARGO_TERM_COLOR: always
       # Explicit in case a host/tool strips image ENV when invoking compose.
       PATH: /usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    entrypoint: ["/bin/bash", "-lc"]
+    entrypoint: ["/bin/bash"]
     command: ["/src/scripts/compose_pebble_issue.sh"]
     depends_on:
       - pebble
