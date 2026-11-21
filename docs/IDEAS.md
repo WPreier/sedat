@@ -46,9 +46,9 @@ Durable list of follow-ups after **P10 complete**. Promoted work lives in
 |------|-------|-----------|
 | Token auch für Metrics-Sidecar | Auth on loopback `/metrics` when token set | later |
 | Token-Rotation ohne Reload | Hot-swap admin token (file watch / admin cmd) | later |
-| Selftest: Upstream-TCP + TLS-ALPN | Deeper connectivity checks | later |
-| `selftest --json` | Machine-readable selftest output | later |
-| Allowlist parseable check in selftest | Validate `upstream_allowlist` / PROXY CIDRs | later |
+| Selftest: Upstream-TCP + TLS-ALPN | Deeper connectivity checks | **done P11.6** |
+| `selftest --json` | Machine-readable selftest output | **done P11.6** |
+| Allowlist parseable check in selftest | Validate `upstream_allowlist` / PROXY CIDRs | **done P11.6** |
 
 ### Proxy / upstream / request-id
 

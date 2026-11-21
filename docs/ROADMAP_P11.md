@@ -65,8 +65,9 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Upstream TCP/TLS-ALPN checks; optional JSON output; allowlist parse checks |
+| **Status** | **done** (v0.1.16) |
+| **Behavior** | Upstream TCP/TLS-ALPN checks; `selftest json`; allowlist parse checks |
+| **Phase note** | [phases/P11_06_selftest_deepen.md](phases/P11_06_selftest_deepen.md) |
 
 ## Status board
 
@@ -77,4 +78,10 @@ P11.6 Selftest deepen (TCP/ALPN/JSON/allowlist)   ← optional bundle
 | 3 | PROXY-reject JSONL | **done** (v0.1.13) |
 | 4 | audit_dropped metrics | **done** (v0.1.14) |
 | 5 | cgroup↔limits docs | **done** (v0.1.15) |
-| 6 | Selftest deepen | pending |
+| 6 | Selftest deepen | **done** (v0.1.16) |
+
+## After P11
+
+P11 board complete. Next work should pick from **later** backlog in
+[IDEAS.md](IDEAS.md) (suggested first candidate: **metrics-sidecar token** or
+**sliding / extending bans**), typically as **ROADMAP_P12**.

@@ -220,9 +220,9 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
     }
     if verb == "help" {
         let help = if token_required {
-            "commands: AUTH <token> | status | health | metrics | reload | cert | selftest | bans | unban <ip> | quit\n"
+            "commands: AUTH <token> | status | health | metrics | reload | cert | selftest [json] | bans | unban <ip> | quit\n"
         } else {
-            "commands: status | health | metrics | reload | cert | selftest | bans | unban <ip> | quit\n"
+            "commands: status | health | metrics | reload | cert | selftest [json] | bans | unban <ip> | quit\n"
         };
         return (help.into(), false);
     }
@@ -268,6 +268,10 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
         },
         "cert" | "cert-info" | "cert_info" => format_cert(state),
         "selftest" | "self-test" | "self_test" => {
+            let want_json = matches!(
+                args.to_ascii_lowercase().as_str(),
+                "json" | "--json" | "-json"
+            );
             let report = run_selftest(state);
             let failed = report.failed_names();
             state.audit.emit_admin_selftest(report.ok(), &failed);
@@ -280,7 +284,11 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
                     "admin selftest failed"
                 );
             }
-            report.format_reply()
+            if want_json {
+                report.format_reply_json()
+            } else {
+                report.format_reply()
+            }
         }
         "bans" | "ban-list" | "ban_list" => format_bans(state),
         "unban" => admin_unban(state, args),
@@ -629,6 +637,34 @@ mod tests {
         let (r, _) = dispatch_admin_line(&state, &mut authed, "help");
         assert!(r.contains("bans"), "{r}");
         assert!(r.contains("unban <ip>"), "{r}");
+        assert!(r.contains("selftest [json]"), "{r}");
+    }
+
+    #[test]
+    fn selftest_json_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = SedatConfig {
+            schema_version: crate::config::CURRENT_SCHEMA_VERSION,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.state_dir = dir.path().to_string_lossy().into();
+        cfg.server.admin_socket = dir.path().join("a.sock").to_string_lossy().into();
+        let state = sample_state_with(cfg, AuditSink::disabled());
+        let mut authed = false;
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "selftest json");
+        assert!(r.starts_with("OK selftest json\n"), "{r}");
+        assert!(r.contains("\"ok\":true"), "{r}");
+        assert!(r.contains("\"name\":\"upstream_tcp\""), "{r}");
+        assert!(r.contains("\"name\":\"allowlists\""), "{r}");
     }
 
     #[test]

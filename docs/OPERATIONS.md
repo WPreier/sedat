@@ -131,7 +131,7 @@ Unix-domain socket after bind:
 - Default mode **`0600`** (owner only).
 - With `server.admin_group = "sedat-admin"` → mode **`0660`** + group ownership.
 - **Token (P10.4):** empty `admin_token` / file / env → FS ACL only (dev-friendly). When a token is set (`SEDAT_ADMIN_TOKEN` > `admin_token_file` > `admin_token`), send `AUTH <token>` first. Failed auth → JSONL `admin_auth_fail` when audit enabled. See [phases/P10_04_admin_tokens.md](phases/P10_04_admin_tokens.md).
-- **Selftest (P10.5):** `selftest` returns PASS/FAIL lines for config, PROXY encode, limits, TLS paths, uptime; audits `admin_selftest`. See [phases/P10_05_admin_selftest.md](phases/P10_05_admin_selftest.md).
+- **Selftest (P10.5 / P11.6):** `selftest` returns PASS/FAIL lines (config, PROXY, limits, TLS paths, allowlists, upstream TCP/TLS-ALPN, uptime); `selftest json` for machine-readable output; audits `admin_selftest`. See [phases/P10_05_admin_selftest.md](phases/P10_05_admin_selftest.md), [phases/P11_06_selftest_deepen.md](phases/P11_06_selftest_deepen.md).
 - **Bans (P11.1):** `bans` lists active temporary IP bans; `unban <ip>` clears one (JSONL `admin_unban`). See [phases/P11_01_admin_bans.md](phases/P11_01_admin_bans.md).
 
 ```bash

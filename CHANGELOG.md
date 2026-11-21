@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] – 2026-11-21
+
+### Added
+
+- **P11.6 deepen admin selftest:** allowlist CIDR parse checks; short-timeout
+  upstream TCP + TLS/ALPN probes (capped); `selftest json` / `--json` machine
+  output. Phase note
+  [docs/phases/P11_06_selftest_deepen.md](docs/phases/P11_06_selftest_deepen.md).
+- **P11 complete** — see [docs/ROADMAP_P11.md](docs/ROADMAP_P11.md).
+
 ## [0.1.15] – 2026-11-21
 
 ### Added
