@@ -150,7 +150,9 @@ async fn continuation_flood_closes_or_rejects() {
     let mut tls = tls_client(addr).await;
 
     // Client preface + empty SETTINGS
-    tls.write_all(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n").await.unwrap();
+    tls.write_all(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+        .await
+        .unwrap();
     tls.write_all(&h2_frame(0x4, 0, 0, &[])).await.unwrap(); // SETTINGS
 
     // HEADERS without END_HEADERS, then many CONTINUATION frames (bomb shape).
@@ -188,7 +190,9 @@ async fn continuation_flood_closes_or_rejects() {
 async fn oversized_single_headers_frame_handled() {
     let (addr, _, _) = spawn_https().await;
     let mut tls = tls_client(addr).await;
-    tls.write_all(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n").await.unwrap();
+    tls.write_all(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+        .await
+        .unwrap();
     tls.write_all(&h2_frame(0x4, 0, 0, &[])).await.unwrap();
 
     // One huge HEADERS payload (HPACK bomb-ish literal).

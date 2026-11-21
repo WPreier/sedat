@@ -46,7 +46,10 @@ pub struct AdminState {
 
 /// Apply admin socket filesystem ACL: `0600` owner-only, or `0660` + group when configured.
 #[cfg(unix)]
-pub fn apply_admin_socket_acl(socket_path: &Path, admin_group: Option<&str>) -> std::io::Result<()> {
+pub fn apply_admin_socket_acl(
+    socket_path: &Path,
+    admin_group: Option<&str>,
+) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     if let Some(gname) = admin_group {
@@ -125,7 +128,10 @@ pub async fn serve_admin(socket_path: &Path, state: AdminState) -> std::io::Resu
 ///
 /// When an admin token is configured (same sources as the Unix socket), scrapes must send
 /// `Authorization: Bearer <token>` (fail-closed). Empty token config → loopback-only (dev).
-pub async fn serve_metrics_sidecar(addr: std::net::SocketAddr, state: AdminState) -> std::io::Result<()> {
+pub async fn serve_metrics_sidecar(
+    addr: std::net::SocketAddr,
+    state: AdminState,
+) -> std::io::Result<()> {
     use hyper::server::conn::http1;
     use hyper::service::service_fn;
     use hyper::Request;
@@ -155,12 +161,8 @@ pub async fn serve_metrics_sidecar(addr: std::net::SocketAddr, state: AdminState
                         .headers()
                         .get(hyper::header::AUTHORIZATION)
                         .and_then(|v| v.to_str().ok());
-                    let resp = metrics_sidecar_response(
-                        &state,
-                        req.method(),
-                        req.uri().path(),
-                        auth,
-                    );
+                    let resp =
+                        metrics_sidecar_response(&state, req.method(), req.uri().path(), auth);
                     Ok::<_, Infallible>(resp)
                 }
             });
@@ -177,8 +179,8 @@ pub fn metrics_sidecar_response(
     path: &str,
     authorization: Option<&str>,
 ) -> hyper::Response<http_body_util::Full<bytes::Bytes>> {
-    use http_body_util::Full;
     use bytes::Bytes;
+    use http_body_util::Full;
     use hyper::{Method, Response, StatusCode};
 
     if *method != Method::GET || path != "/metrics" {
@@ -199,7 +201,10 @@ pub fn metrics_sidecar_response(
         state.audit.emit_metrics_auth_fail(reason);
         return Response::builder()
             .status(StatusCode::UNAUTHORIZED)
-            .header(hyper::header::WWW_AUTHENTICATE, "Bearer realm=\"sedat-metrics\"")
+            .header(
+                hyper::header::WWW_AUTHENTICATE,
+                "Bearer realm=\"sedat-metrics\"",
+            )
             .header(hyper::header::CONTENT_TYPE, "text/plain; charset=utf-8")
             .body(Full::new(Bytes::from_static(b"unauthorized")))
             .unwrap();
@@ -280,7 +285,10 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
     if token_required && !*authed {
         warn!(target: "sedat::audit", command = %verb, "admin command rejected (auth required)");
         state.audit.emit_admin_auth_fail("required");
-        return ("ERR auth required (send AUTH <token> first)\n".into(), false);
+        return (
+            "ERR auth required (send AUTH <token> first)\n".into(),
+            false,
+        );
     }
 
     let reply = match verb.as_str() {
@@ -582,7 +590,14 @@ mod tests {
             });
         });
         ready_rx.recv().unwrap();
-        audit.emit_proxy_deny("rate_limit", 429, "127.0.0.1:1", Some("drop-me"), None, None);
+        audit.emit_proxy_deny(
+            "rate_limit",
+            429,
+            "127.0.0.1:1",
+            Some("drop-me"),
+            None,
+            None,
+        );
         assert!(audit.dropped() >= 1);
         done_tx.send(()).unwrap();
         t.join().unwrap();
@@ -641,7 +656,9 @@ mod tests {
 
         let text = std::fs::read_to_string(&audit_path).unwrap();
         assert!(text.contains("\"event\":\"admin_auth_fail\""));
-        assert!(text.contains("\"reason\":\"required\"") || text.contains("\"reason\":\"bad_token\""));
+        assert!(
+            text.contains("\"reason\":\"required\"") || text.contains("\"reason\":\"bad_token\"")
+        );
     }
 
     #[test]
@@ -701,7 +718,10 @@ mod tests {
         let lim = Limiter::new(limits.clone());
         let ip: IpAddr = "203.0.113.50".parse().unwrap();
         assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Allow);
-        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::RateLimited);
+        assert_eq!(
+            lim.check_rate(ip, &limits).outcome,
+            RateOutcome::RateLimited
+        );
         assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Banned);
 
         let mut cfg = SedatConfig {

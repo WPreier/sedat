@@ -61,8 +61,7 @@ pub fn directory_renewal_info_url(directory_body: &str) -> Option<String> {
 
 /// Parse ARI JSON into [`AriInfo`].
 pub fn parse_renewal_info_json(body: &str) -> Result<AriInfo, String> {
-    let raw: AriInfoJson =
-        serde_json::from_str(body).map_err(|e| format!("ARI JSON: {e}"))?;
+    let raw: AriInfoJson = serde_json::from_str(body).map_err(|e| format!("ARI JSON: {e}"))?;
     let start = parse_rfc3339(&raw.suggested_window.start)?;
     let end = parse_rfc3339(&raw.suggested_window.end)?;
     if end < start {
@@ -75,8 +74,7 @@ pub fn parse_renewal_info_json(body: &str) -> Result<AriInfo, String> {
 }
 
 fn parse_rfc3339(s: &str) -> Result<SystemTime, String> {
-    let dt = chrono::DateTime::parse_from_rfc3339(s)
-        .map_err(|e| format!("ARI time `{s}`: {e}"))?;
+    let dt = chrono::DateTime::parse_from_rfc3339(s).map_err(|e| format!("ARI time `{s}`: {e}"))?;
     let secs = dt.timestamp();
     if secs < 0 {
         return Err(format!("ARI time `{s}` before Unix epoch"));
@@ -96,14 +94,13 @@ pub fn certificate_id_from_pem(cert_pem: &[u8]) -> Result<String, String> {
 }
 
 fn certificate_id_from_der(der: &[u8]) -> Result<String, String> {
-    let (_, parsed) =
-        parse_x509_certificate(der).map_err(|e| format!("x509 parse: {e}"))?;
+    let (_, parsed) = parse_x509_certificate(der).map_err(|e| format!("x509 parse: {e}"))?;
     let aki: &[u8] = parsed
         .iter_extensions()
         .find_map(|ext| match ext.parsed_extension() {
             ParsedExtension::AuthorityKeyIdentifier(aki_ext) => {
                 aki_ext.key_identifier.as_ref().map(|ki| {
-                    let b: &[u8] = ki.0.as_ref();
+                    let b: &[u8] = ki.0;
                     b
                 })
             }
@@ -150,11 +147,7 @@ pub fn renewal_info_request_url(base: &str, cert_id: &str) -> String {
 /// If `now` is already past `end`, returns `now` (renew immediately).
 /// If `now` is inside the window, jitters between `now` and `end`.
 #[must_use]
-pub fn pick_renewal_instant(
-    now: SystemTime,
-    window: &AriWindow,
-    jitter_01: f64,
-) -> SystemTime {
+pub fn pick_renewal_instant(now: SystemTime, window: &AriWindow, jitter_01: f64) -> SystemTime {
     let jitter = jitter_01.clamp(0.0, 1.0);
     if now >= window.end {
         return now;
@@ -286,9 +279,7 @@ pub fn sleep_until(now: SystemTime, at: SystemTime, max: Duration) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rcgen::{
-        BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair,
-    };
+    use rcgen::{BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair};
 
     #[test]
     fn parses_directory_renewal_info() {
@@ -381,8 +372,7 @@ mod tests {
 
         let mut ee = CertificateParams::new(vec!["localhost".into()]).unwrap();
         ee.distinguished_name = DistinguishedName::new();
-        ee.distinguished_name
-            .push(DnType::CommonName, "localhost");
+        ee.distinguished_name.push(DnType::CommonName, "localhost");
         ee.use_authority_key_identifier_extension = true;
         let ee_key = KeyPair::generate().unwrap();
         let ee_cert = ee.signed_by(&ee_key, &ca_cert, &ca_key).unwrap();

@@ -382,9 +382,10 @@ fn rotate_file(st: &mut SinkState, path: &Path) -> std::io::Result<()> {
 }
 
 fn write_line(st: &mut SinkState, line: &str) -> std::io::Result<()> {
-    let path = st.path.clone().ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "audit path unset")
-    })?;
+    let path = st
+        .path
+        .clone()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "audit path unset"))?;
     if needs_size_rotate(st, &path) || needs_age_rotate(st) {
         rotate_file(st, &path)?;
     }
@@ -479,7 +480,10 @@ mod tests {
             old: "false".into(),
             new: "true".into(),
         }];
-        s.emit_config_reload(&changes, "proxy_protocol.inbound_enabled: \"false\" → \"true\"");
+        s.emit_config_reload(
+            &changes,
+            "proxy_protocol.inbound_enabled: \"false\" → \"true\"",
+        );
         let text = fs::read_to_string(&path).unwrap();
         let v: Value = serde_json::from_str(text.lines().next().unwrap()).unwrap();
         assert_eq!(v["event"], "config_reload");

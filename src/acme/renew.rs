@@ -77,7 +77,7 @@ impl AcmeManager {
         let directory = directory_url(&self.cfg.directory);
         info!(%directory, domains = ?self.cfg.domains, "ACME order starting");
 
-        match issue_certificate(&self.cfg, &self.paths, &self.dns, &directory).await {
+        match issue_certificate(&self.cfg, &self.paths, self.dns.as_ref(), &directory).await {
             Ok((cert_pem, key_pem)) => {
                 self.install_cert(&cert_pem, &key_pem)?;
                 Ok(())
@@ -169,9 +169,7 @@ impl AcmeManager {
     pub async fn plan_renewal(&self) -> RenewSchedule {
         let now = SystemTime::now();
         let cert_pem = std::fs::read(&self.paths.cert_path).ok();
-        let not_after = cert_pem
-            .as_ref()
-            .and_then(|p| not_after_from_pem(p).ok());
+        let not_after = cert_pem.as_ref().and_then(|p| not_after_from_pem(p).ok());
 
         let mut ari_window = None;
         let mut ari_active = false;
@@ -227,12 +225,10 @@ impl AcmeManager {
 async fn issue_certificate(
     cfg: &AcmeConfig,
     paths: &AcmePaths,
-    dns: &Box<dyn DnsProvider>,
+    dns: &dyn DnsProvider,
     directory: &str,
 ) -> Result<(Vec<u8>, Vec<u8>), String> {
-    use instant_acme::{
-        Account, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus,
-    };
+    use instant_acme::{Account, ChallengeType, Identifier, NewAccount, NewOrder, OrderStatus};
 
     paths.ensure().map_err(|e| e.to_string())?;
 
@@ -303,7 +299,10 @@ async fn issue_certificate(
     let mut delay = Duration::from_millis(250);
     for _ in 0..40 {
         tokio::time::sleep(delay).await;
-        let state = order.refresh().await.map_err(|e| format!("order refresh: {e}"))?;
+        let state = order
+            .refresh()
+            .await
+            .map_err(|e| format!("order refresh: {e}"))?;
         match state.status {
             OrderStatus::Ready => break,
             OrderStatus::Invalid => {

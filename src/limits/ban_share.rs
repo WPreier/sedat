@@ -253,8 +253,8 @@ fn resolve_share_secret(limits: &LimitsConfig) -> Result<String, String> {
     }
     let file = limits.ban_share_secret_file.trim();
     if !file.is_empty() {
-        let contents = fs::read_to_string(file)
-            .map_err(|e| format!("ban_share_secret_file `{file}`: {e}"))?;
+        let contents =
+            fs::read_to_string(file).map_err(|e| format!("ban_share_secret_file `{file}`: {e}"))?;
         let t = contents.trim();
         if !t.is_empty() {
             return Ok(t.to_string());
@@ -458,6 +458,9 @@ mod tests {
             .duration_since(SystemTime::now())
             .unwrap_or_default()
             .as_secs();
-        assert!(remaining > 60, "expected max expiry retained, got {remaining}s");
+        assert!(
+            remaining > 60,
+            "expected max expiry retained, got {remaining}s"
+        );
     }
 }

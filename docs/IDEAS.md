@@ -12,14 +12,14 @@ See [ROADMAP_P09.md](ROADMAP_P09.md) and [ROADMAP_P10.md](ROADMAP_P10.md). Highl
 
 ## Deferred / Open backlog
 
-Durable list of follow-ups after **P10/P11**. Active promotion:
-[ROADMAP_P11.md](ROADMAP_P11.md) (done), [ROADMAP_P12.md](ROADMAP_P12.md).
+Durable list of follow-ups after **P10/P11/P12**. Active promotion:
+[ROADMAP_P13.md](ROADMAP_P13.md).
 
 ### Explicitly deferred / declined
 
 | Item | Status | Notes |
 |------|--------|-------|
-| **E8 HTTP/3 attack corpus** | **later** (large) | Mirror H2 corpus for QUIC when `http3` is on |
+| **E8 HTTP/3 attack corpus** | **done P13.1** | Programmatic QUIC corpus (`tests/h3_attack_corpus.rs`); not a GB archive |
 | **E9 Config signing (ed25519)** | **rejected** | Explicitly declined for P10; keep as “no” unless product revisits |
 
 ### Ops / limits / bans
@@ -30,7 +30,7 @@ Durable list of follow-ups after **P10/P11**. Active promotion:
 | Ban-State über Replicas teilen | File-backed HMAC shared ban map (not Redis) | **done P12.6** |
 | Sliding ban / Verlängerung bei Strike während Ban | Extend TTL if abuse continues while banned | **done P12.2** |
 | Doc formula: `limits.max_connections` ↔ `MemoryMax` / `LimitNOFILE` | Ops guidance aligning TOML + cgroup | **done P11.5** |
-| Multiple DNS providers | Trait ready; Cloudflare first | as needed |
+| Multiple DNS providers | Trait ready; Cloudflare first | **P13.2** |
 
 ### Audit / logging / metrics
 

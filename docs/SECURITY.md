@@ -30,7 +30,7 @@ Full write-up: **[THREAT_MODEL.md](THREAT_MODEL.md)** (assets, trust boundaries,
 | Metrics exposure | Admin socket / optional **loopback-only** sidecar; never public control plane |
 | Schema surprise upgrades | Exact `schema_version`; migrate helper fail-closed |
 
-Automated negative tests: `tests/attack_hygiene.rs`, `tests/h2_attack_corpus.rs`. Manual scripts: `examples/hardening/`.
+Automated negative tests: `tests/attack_hygiene.rs`, `tests/h2_attack_corpus.rs`, `tests/h3_attack_corpus.rs` (`--features http3`). Manual scripts: `examples/hardening/`.
 
 ## TLS policy
 

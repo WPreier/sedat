@@ -10,14 +10,13 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use rcgen::{
-    BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, KeyPair,
-};
+use rcgen::{BasicConstraints, CertificateParams, DnType, ExtendedKeyUsagePurpose, IsCa, KeyPair};
 use rustls::pki_types::CertificateDer;
 use rustls::server::WebPkiClientVerifier;
 use rustls::{RootCertStore, ServerConfig};
 use sedat::config::{
-    HostRoute, PathRoute, ProxyProtocolConfig, RoutesConfig, SedatConfig, ServerConfig as SedatServer,
+    HostRoute, PathRoute, ProxyProtocolConfig, RoutesConfig, SedatConfig,
+    ServerConfig as SedatServer,
 };
 use sedat::proxy::{handle_request, ProxyState};
 use sedat::tls::ensure_crypto_provider;
@@ -135,12 +134,7 @@ async fn spawn_mtls_upstream(mat: &MtlsMaterial) -> std::net::SocketAddr {
     addr
 }
 
-fn cfg_https(
-    upstream: &str,
-    cert: &str,
-    key: &str,
-    ca: &str,
-) -> SedatConfig {
+fn cfg_https(upstream: &str, cert: &str, key: &str, ca: &str) -> SedatConfig {
     SedatConfig {
         schema_version: 1,
         server: SedatServer::default(),

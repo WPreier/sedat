@@ -8,7 +8,6 @@ mod upstream_mtls;
 mod upstream_pin;
 
 pub use forward::{proxy_request, ProxyError, RequestIdFwd};
-pub use upstream_mtls::{build_upstream_client_config, UpstreamTlsPaths};
 pub use proxy_protocol::{
     accept_with_inbound_proxy, accept_with_inbound_proxy_placement, apply_inbound_after_tls,
     encode_proxy_v1, encode_proxy_v2, inbound_on_plaintext, inbound_on_tls, inbound_proxy_trusted,
@@ -20,6 +19,7 @@ pub use request_id::{
     sanitize_request_id, valid_header_name, DEFAULT_REQUEST_ID_HEADER, MAX_REQUEST_ID_LEN,
 };
 pub use router::{resolve_route, RouteMatch};
+pub use upstream_mtls::{build_upstream_client_config, UpstreamTlsPaths};
 pub use upstream_pin::{
     expand_allowlist, filter_pinned_addrs, filter_pinned_addrs_expanded, ip_allowed_by_pin,
     upstream_ip_allowed, DnsCache, ExpandedPin, DEFAULT_DNS_REFRESH_SECS,
@@ -115,6 +115,7 @@ fn attach_request_id(
 }
 
 /// Pre-hyper HTTP/1 early reject: response header + JSONL + tracing with request_id.
+#[allow(clippy::too_many_arguments)]
 async fn write_early_http_deny(
     stream: &mut PrefixedStream,
     state: &ProxyState,
@@ -163,6 +164,7 @@ async fn write_early_http_deny(
     let _ = stream.write_all(resp.as_bytes()).await;
 }
 
+#[allow(clippy::too_many_arguments)]
 fn deny_response(
     state: &ProxyState,
     cfg: &SedatConfig,
@@ -174,14 +176,9 @@ fn deny_response(
     host: Option<&str>,
     path: Option<&str>,
 ) -> Response<BoxBody> {
-    state.audit.emit_proxy_deny(
-        reason,
-        status.as_u16(),
-        &peer.to_string(),
-        rid,
-        host,
-        path,
-    );
+    state
+        .audit
+        .emit_proxy_deny(reason, status.as_u16(), &peer.to_string(), rid, host, path);
     attach_request_id(
         html_response(status, body),
         &cfg.logging.request_id_header,
@@ -292,12 +289,9 @@ pub async fn handle_request(
                     strikes,
                     "temporary IP ban applied"
                 );
-                state.audit.emit_ip_ban(
-                    &peer.to_string(),
-                    rid_ref,
-                    *duration_secs,
-                    *strikes,
-                );
+                state
+                    .audit
+                    .emit_ip_ban(&peer.to_string(), rid_ref, *duration_secs, *strikes);
             }
             BanLifecycle::Extended {
                 duration_secs,
@@ -591,11 +585,9 @@ pub async fn serve_http(listener: TcpListener, state: ProxyState) -> std::io::Re
                         reason = reason.as_str(),
                         "rejected inbound PROXY (plaintext)"
                     );
-                    state.audit.emit_proxy_reject(
-                        &peer.to_string(),
-                        reason.as_str(),
-                        "plaintext",
-                    );
+                    state
+                        .audit
+                        .emit_proxy_reject(&peer.to_string(), reason.as_str(), "plaintext");
                     return;
                 }
                 Err(e) => {

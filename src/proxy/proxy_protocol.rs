@@ -234,7 +234,9 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
 
     if looks_like_proxy_v1(&buf) {
         if !inbound_proxy_trusted(peer.ip(), enabled, allowlist) {
-            return Ok(InboundProbe::Rejected(ProxyRejectReason::UntrustedOrDisabled));
+            return Ok(InboundProbe::Rejected(
+                ProxyRejectReason::UntrustedOrDisabled,
+            ));
         }
         while !buf.windows(2).any(|w| w == b"\r\n") {
             let mut b = [0u8; 1];
@@ -256,7 +258,7 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
         };
     }
 
-    if looks_like_proxy_v2(&buf) || (n >= 12 && &buf[..12.min(n)] == &PROXY_V2_SIG[..12.min(n)]) {
+    if looks_like_proxy_v2(&buf) || (n >= 12 && buf[..12.min(n)] == PROXY_V2_SIG[..12.min(n)]) {
         while buf.len() < 16 {
             let mut b = [0u8; 1];
             let k = stream.read(&mut b).await?;
@@ -277,7 +279,9 @@ pub async fn probe_inbound_proxy_reader<R: AsyncRead + Unpin>(
             return Ok(InboundProbe::Absent { leftover: buf });
         }
         if !inbound_proxy_trusted(peer.ip(), enabled, allowlist) {
-            return Ok(InboundProbe::Rejected(ProxyRejectReason::UntrustedOrDisabled));
+            return Ok(InboundProbe::Rejected(
+                ProxyRejectReason::UntrustedOrDisabled,
+            ));
         }
         let len = u16::from_be_bytes([buf[14], buf[15]]) as usize;
         while buf.len() < 16 + len {
@@ -410,9 +414,7 @@ pub async fn accept_with_inbound_proxy(
     allowlist: &[String],
 ) -> io::Result<Result<(PrefixedStream, SocketAddr), ProxyRejectReason>> {
     match probe_inbound_proxy(&mut stream, peer, enabled, allowlist).await? {
-        InboundProbe::Absent { leftover } => {
-            Ok(Ok((PrefixedStream::new(stream, leftover), peer)))
-        }
+        InboundProbe::Absent { leftover } => Ok(Ok((PrefixedStream::new(stream, leftover), peer))),
         InboundProbe::Accepted { client, leftover } => {
             Ok(Ok((PrefixedStream::new(stream, leftover), client)))
         }

@@ -188,9 +188,7 @@ impl Limiter {
                     let interval = limits.ban_extend_min_interval_secs;
                     let audit_ok = match st.last_extend_audit {
                         None => true,
-                        Some(t) => {
-                            interval == 0 || now.duration_since(t).as_secs() >= interval
-                        }
+                        Some(t) => interval == 0 || now.duration_since(t).as_secs() >= interval,
                     };
                     if audit_ok {
                         st.last_extend_audit = Some(now);
@@ -247,8 +245,7 @@ impl Limiter {
             return false;
         };
         let st = entry.lock();
-        st.banned_until
-            .is_some_and(|until| Instant::now() < until)
+        st.banned_until.is_some_and(|until| Instant::now() < until)
     }
 
     /// List active temporary bans (expires stale entries while scanning).
@@ -546,10 +543,7 @@ mod tests {
         thread::sleep(Duration::from_millis(2100));
         let after = lim.check_rate(ip, &cfg);
         // Ban expired; may Allow or RateLimited depending on tokens.
-        assert!(matches!(
-            after.lifecycle,
-            Some(BanLifecycle::Expired)
-        ));
+        assert!(matches!(after.lifecycle, Some(BanLifecycle::Expired)));
         assert!(!lim.is_banned(ip));
     }
 

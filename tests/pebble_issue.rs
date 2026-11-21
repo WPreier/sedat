@@ -22,8 +22,8 @@ async fn pebble_dns01_issues_certificate() {
         });
     std::fs::create_dir_all(&state).unwrap();
     let dns_file = state.join("acme-dns-challenge.txt");
-    let directory = std::env::var("PEBBLE_DIRECTORY")
-        .unwrap_or_else(|_| "https://localhost:14000/dir".into());
+    let directory =
+        std::env::var("PEBBLE_DIRECTORY").unwrap_or_else(|_| "https://localhost:14000/dir".into());
 
     let cfg = AcmeConfig {
         enabled: true,

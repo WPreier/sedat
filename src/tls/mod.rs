@@ -144,11 +144,9 @@ pub async fn serve_https(
                         reason = reason.as_str(),
                         "rejected inbound PROXY on HTTPS (plaintext stage)"
                     );
-                    state.audit.emit_proxy_reject(
-                        &peer.to_string(),
-                        reason.as_str(),
-                        "plaintext",
-                    );
+                    state
+                        .audit
+                        .emit_proxy_reject(&peer.to_string(), reason.as_str(), "plaintext");
                     return;
                 }
                 Err(e) => {
@@ -183,11 +181,9 @@ pub async fn serve_https(
                         reason = reason.as_str(),
                         "rejected inbound PROXY after TLS"
                     );
-                    state.audit.emit_proxy_reject(
-                        &peer.to_string(),
-                        reason.as_str(),
-                        "after_tls",
-                    );
+                    state
+                        .audit
+                        .emit_proxy_reject(&peer.to_string(), reason.as_str(), "after_tls");
                     return;
                 }
                 Err(e) => {

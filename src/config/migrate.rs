@@ -16,10 +16,9 @@ pub fn migration_path(from: u32, to: u32) -> Option<&'static str> {
     if to != CURRENT_SCHEMA_VERSION {
         return None;
     }
-    match from {
-        // Future: map 0 → 1 (or N → N+1) with documented field renames here.
-        _ => None,
-    }
+    let _ = from;
+    // Future: map 0 → 1 (or N → N+1) with documented field renames here.
+    None
 }
 
 /// Extract `schema_version` from TOML text without full validation.
@@ -29,13 +28,16 @@ pub fn peek_schema_version(text: &str) -> Result<u32, ConfigError> {
         schema_version: u32,
     }
     let v: OnlyVersion = toml::from_str(text).map_err(|e| {
-        let line = e.span().map(|s| {
-            text[..s.start.min(text.len())]
-                .bytes()
-                .filter(|b| *b == b'\n')
-                .count()
-                + 1
-        }).unwrap_or(1);
+        let line = e
+            .span()
+            .map(|s| {
+                text[..s.start.min(text.len())]
+                    .bytes()
+                    .filter(|b| *b == b'\n')
+                    .count()
+                    + 1
+            })
+            .unwrap_or(1);
         ConfigError::Parse {
             line,
             message: e.message().to_string(),

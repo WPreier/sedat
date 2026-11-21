@@ -122,9 +122,7 @@ pub fn generate_request_id() -> String {
 pub fn valid_header_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
         && name
             .as_bytes()
             .first()

@@ -26,7 +26,8 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
-      # http3 feature currently blocked by upstream h3-quinn/quinn StreamId API drift.
+      - name: HTTP/3 attack corpus
+        run: cargo test --features http3 --test h3_attack_corpus
       - name: Build release
         run: cargo build --release
 

@@ -81,5 +81,5 @@ See [CONFIG.md](CONFIG.md) and `sedat --migrate-config`. Unknown `schema_version
 
 - Seccomp-BPF allowlist: [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md).
 - Optional upstream mTLS: [phases/P10_07_upstream_mtls.md](phases/P10_07_upstream_mtls.md). Config signing: see [ROADMAP_P10.md](ROADMAP_P10.md).
-- HTTP/3 amplification corpus: deferred (E8).
+- HTTP/3 / QUIC flood corpus: [phases/P13_01_e8_h3_corpus.md](phases/P13_01_e8_h3_corpus.md) (`tests/h3_attack_corpus.rs`).
 - Temporary bans are per-process (not shared across SeDat replicas); behind a shared LB, prefer LB-level bans for multi-instance.

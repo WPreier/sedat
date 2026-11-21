@@ -5,6 +5,25 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.23] – 2026-11-21
+
+### Added
+
+- **P13.1 / E8 HTTP/3 attack corpus:** programmatic QUIC connection flood, UDP
+  junk, and stream-open storm tests (`tests/h3_attack_corpus.rs`) behind
+  `--features http3`, with strict caps (no multi-GB archive). Roadmap
+  [docs/ROADMAP_P13.md](docs/ROADMAP_P13.md); phase note
+  [docs/phases/P13_01_e8_h3_corpus.md](docs/phases/P13_01_e8_h3_corpus.md).
+
+### Fixed
+
+- **`http3` feature build:** drop broken optional `h3` / `h3-quinn` 0.0.7
+  (quinn 0.11 `StreamId` API drift); feature is Quinn-only for the experimental
+  listener + corpus. Set QUIC ALPN to `h3`.
+- **CI vs rustc 1.100:** `cargo fmt` sweep + clippy cleanups
+  (`manual_contains`, `io_other_error`, `&Box<T>`, etc.); allow
+  `clippy::field_reassign_with_default` for test helpers.
+
 ## [0.1.22] – 2026-11-21
 
 ### Added

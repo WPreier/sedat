@@ -53,7 +53,11 @@ pub fn apply_default_bpf() -> Result<(), String> {
     }
 
     let bpf = compile_default_filter()?;
-    debug!(profile = PROFILE_NAME, instrs = bpf.len(), "installing seccomp BPF");
+    debug!(
+        profile = PROFILE_NAME,
+        instrs = bpf.len(),
+        "installing seccomp BPF"
+    );
     apply_filter_all_threads(&bpf).map_err(|e| format!("seccomp apply: {e}"))?;
     Ok(())
 }
@@ -199,11 +203,7 @@ fn allowed_syscalls() -> Vec<i64> {
 
     #[cfg(target_arch = "aarch64")]
     {
-        v.extend_from_slice(&[
-            libc::SYS_epoll_pwait2,
-            libc::SYS_ppoll,
-            libc::SYS_fstatfs,
-        ]);
+        v.extend_from_slice(&[libc::SYS_epoll_pwait2, libc::SYS_ppoll, libc::SYS_fstatfs]);
     }
 
     v.sort_unstable();
