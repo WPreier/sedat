@@ -2,6 +2,9 @@
 //!
 //! With `http3` enabled, accepted connections are driven through hyperium `h3` /
 //! `h3-quinn` and requests are handed to [`crate::proxy::handle_request`].
+//!
+//! Request and response bodies are streamed (no full intermediate buffer on the
+//! H3 edge); size is tracked against `max_body_bytes` and oversize is fail-closed.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -133,57 +136,129 @@ async fn drive_h3_connection(
 }
 
 #[cfg(feature = "http3")]
-async fn handle_h3_request<C>(
-    resolver: h3::server::RequestResolver<C, bytes::Bytes>,
-    peer: SocketAddr,
-    state: ProxyState,
-    limits: Arc<Limiter>,
-) -> Result<(), String>
+#[derive(Debug, thiserror::Error)]
+enum H3BodyError {
+    #[error("request body exceeds limit")]
+    TooLarge,
+    #[error("h3 recv body: {0}")]
+    Recv(String),
+}
+
+#[cfg(feature = "http3")]
+enum PumpOutcome<S> {
+    Complete(S),
+    TooLarge(S),
+    Failed(S, String),
+}
+
+/// Hyper body backed by an mpsc of H3 DATA frames (no full-buffer assemble).
+#[cfg(feature = "http3")]
+struct H3ChanBody {
+    rx: tokio::sync::mpsc::Receiver<Result<bytes::Bytes, H3BodyError>>,
+}
+
+#[cfg(feature = "http3")]
+impl hyper::body::Body for H3ChanBody {
+    type Data = bytes::Bytes;
+    type Error = H3BodyError;
+
+    fn poll_frame(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Result<hyper::body::Frame<Self::Data>, Self::Error>>> {
+        use std::task::Poll;
+        match self.rx.poll_recv(cx) {
+            Poll::Ready(Some(Ok(buf))) => Poll::Ready(Some(Ok(hyper::body::Frame::data(buf)))),
+            Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
+            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+#[cfg(feature = "http3")]
+async fn pump_h3_request_body<S>(
+    mut stream: h3::server::RequestStream<S, bytes::Bytes>,
+    max_body: usize,
+    tx: tokio::sync::mpsc::Sender<Result<bytes::Bytes, H3BodyError>>,
+) -> PumpOutcome<h3::server::RequestStream<S, bytes::Bytes>>
 where
-    C: h3::quic::Connection<bytes::Bytes>,
-    C::BidiStream: Send + 'static,
+    S: h3::quic::RecvStream + h3::quic::SendStream<bytes::Bytes>,
 {
-    use bytes::{Buf, BytesMut};
-    use http_body_util::{BodyExt, Full};
+    use bytes::Buf;
 
-    let (req, mut stream) = resolver
-        .resolve_request()
-        .await
-        .map_err(|e| format!("h3 resolve: {e}"))?;
-
-    let max_body = limits.max_body_bytes();
-    let mut body = BytesMut::new();
+    let mut seen = 0usize;
     loop {
         match stream.recv_data().await {
             Ok(Some(mut chunk)) => {
                 while chunk.has_remaining() {
                     let n = chunk.remaining();
-                    if body.len() + n > max_body {
-                        let _ = stream
-                            .send_response(
-                                http::Response::builder()
-                                    .status(http::StatusCode::PAYLOAD_TOO_LARGE)
-                                    .body(())
-                                    .unwrap(),
-                            )
-                            .await;
-                        let _ = stream.finish().await;
-                        return Err("h3 body too large".into());
+                    if seen.saturating_add(n) > max_body {
+                        let _ = tx.send(Err(H3BodyError::TooLarge)).await;
+                        stream.stop_sending(h3::error::Code::H3_NO_ERROR);
+                        return PumpOutcome::TooLarge(stream);
                     }
-                    body.extend_from_slice(chunk.chunk());
+                    seen += n;
+                    let data = bytes::Bytes::copy_from_slice(chunk.chunk());
                     chunk.advance(n);
+                    if tx.send(Ok(data)).await.is_err() {
+                        // Consumer dropped (e.g. early deny); stop reading and keep stream.
+                        stream.stop_sending(h3::error::Code::H3_NO_ERROR);
+                        return PumpOutcome::Complete(stream);
+                    }
                 }
             }
             Ok(None) => break,
-            Err(e) => return Err(format!("h3 recv body: {e}")),
+            Err(e) => {
+                let msg = e.to_string();
+                let _ = tx.send(Err(H3BodyError::Recv(msg.clone()))).await;
+                return PumpOutcome::Failed(stream, msg);
+            }
         }
     }
     let _ = stream.recv_trailers().await;
+    drop(tx);
+    PumpOutcome::Complete(stream)
+}
 
-    let req = req.map(|_| Full::new(body.freeze()));
-    let resp = crate::proxy::handle_request(req, peer, state, None)
+#[cfg(feature = "http3")]
+async fn send_h3_empty_status<S>(
+    stream: &mut h3::server::RequestStream<S, bytes::Bytes>,
+    status: http::StatusCode,
+) -> Result<(), String>
+where
+    S: h3::quic::SendStream<bytes::Bytes>,
+{
+    let h3_resp = http::Response::builder()
+        .status(status)
+        .body(())
+        .map_err(|e| format!("h3 resp build: {e}"))?;
+    stream
+        .send_response(h3_resp)
         .await
-        .unwrap_or_else(|infallible| match infallible {});
+        .map_err(|e| format!("h3 send_response: {e}"))?;
+    stream
+        .finish()
+        .await
+        .map_err(|e| format!("h3 finish: {e}"))?;
+    Ok(())
+}
+
+#[cfg(feature = "http3")]
+async fn stream_h3_response<S, B>(
+    stream: &mut h3::server::RequestStream<S, bytes::Bytes>,
+    resp: http::Response<B>,
+    max_body: usize,
+) -> Result<(), String>
+where
+    S: h3::quic::SendStream<bytes::Bytes>,
+    B: hyper::body::Body,
+    B::Data: bytes::Buf,
+    B::Error: std::fmt::Display,
+{
+    use bytes::Buf;
+    use http_body_util::BodyExt;
+    use std::pin::pin;
 
     let status = resp.status();
     let headers = resp.headers().clone();
@@ -199,21 +274,78 @@ where
         .await
         .map_err(|e| format!("h3 send_response: {e}"))?;
 
-    let collected = resp
-        .into_body()
-        .collect()
-        .await
-        .map(|c| c.to_bytes())
-        .unwrap_or_default();
-    if !collected.is_empty() {
-        stream
-            .send_data(collected)
-            .await
-            .map_err(|e| format!("h3 send_data: {e}"))?;
+    let mut body = pin!(resp.into_body());
+    let mut sent = 0usize;
+    while let Some(frame) = body.as_mut().frame().await {
+        let frame = frame.map_err(|e| format!("h3 resp body: {e}"))?;
+        if let Ok(mut data) = frame.into_data() {
+            let n = data.remaining();
+            if n == 0 {
+                continue;
+            }
+            if sent.saturating_add(n) > max_body {
+                stream.stop_stream(h3::error::Code::H3_NO_ERROR);
+                return Err("h3 response body too large".into());
+            }
+            sent += n;
+            let chunk = data.copy_to_bytes(n);
+            stream
+                .send_data(chunk)
+                .await
+                .map_err(|e| format!("h3 send_data: {e}"))?;
+        }
     }
     stream
         .finish()
         .await
         .map_err(|e| format!("h3 finish: {e}"))?;
     Ok(())
+}
+
+#[cfg(feature = "http3")]
+async fn handle_h3_request<C>(
+    resolver: h3::server::RequestResolver<C, bytes::Bytes>,
+    peer: SocketAddr,
+    state: ProxyState,
+    limits: Arc<Limiter>,
+) -> Result<(), String>
+where
+    C: h3::quic::Connection<bytes::Bytes>,
+    C::BidiStream: Send + 'static,
+{
+    let (req, stream) = resolver
+        .resolve_request()
+        .await
+        .map_err(|e| format!("h3 resolve: {e}"))?;
+
+    let max_body = limits.max_body_bytes();
+    let (tx, rx) = tokio::sync::mpsc::channel::<Result<bytes::Bytes, H3BodyError>>(8);
+    let (ret_tx, ret_rx) = tokio::sync::oneshot::channel::<
+        PumpOutcome<h3::server::RequestStream<C::BidiStream, bytes::Bytes>>,
+    >();
+
+    tokio::spawn(async move {
+        let outcome = pump_h3_request_body(stream, max_body, tx).await;
+        let _ = ret_tx.send(outcome);
+    });
+
+    let req = req.map(|_| H3ChanBody { rx });
+    let resp = crate::proxy::handle_request(req, peer, state, None)
+        .await
+        .unwrap_or_else(|infallible| match infallible {});
+
+    let mut stream = match ret_rx.await {
+        Ok(PumpOutcome::Complete(s)) => s,
+        Ok(PumpOutcome::TooLarge(mut s)) => {
+            let _ = send_h3_empty_status(&mut s, http::StatusCode::PAYLOAD_TOO_LARGE).await;
+            return Err("h3 body too large".into());
+        }
+        Ok(PumpOutcome::Failed(mut s, msg)) => {
+            let _ = send_h3_empty_status(&mut s, http::StatusCode::BAD_REQUEST).await;
+            return Err(msg);
+        }
+        Err(_) => return Err("h3 body pump dropped".into()),
+    };
+
+    stream_h3_response(&mut stream, resp, max_body).await
 }

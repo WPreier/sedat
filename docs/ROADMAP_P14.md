@@ -11,6 +11,7 @@ commit + push/PR, wait for review.
 ```text
 P14.1 Broaden hot-reload      ← done (v0.1.25)
 P14.2 H3 full request proxy   ← done (v0.1.26; h3-quinn 0.0.10)
+P14.3 H3 streamed bodies      ← done (v0.1.27)
 … later: remaining ops/hardening from IDEAS …
 ```
 
@@ -32,9 +33,18 @@ P14.2 H3 full request proxy   ← done (v0.1.26; h3-quinn 0.0.10)
 | **Behavior** | Feature `http3` wires `h3` + `h3-quinn`; accepted streams go through `handle_request` with body/stream caps |
 | **Phase note** | [phases/P14_02_h3_request_proxy.md](phases/P14_02_h3_request_proxy.md) |
 
+### P14.3 – HTTP/3 streamed bodies
+
+| | |
+|--|--|
+| **Status** | **done** (v0.1.27) |
+| **Behavior** | Stream H3 request/response bodies (no full edge buffer); `max_body_bytes` fail-closed → 413 |
+| **Phase note** | [phases/P14_03_h3_streamed_bodies.md](phases/P14_03_h3_streamed_bodies.md) |
+
 ## Status board
 
 | Step | Item | Status |
 |------|------|--------|
 | 1 | Broaden hot-reload | **done** (v0.1.25) |
 | 2 | H3 full request proxy | **done** (v0.1.26) |
+| 3 | H3 streamed bodies | **done** (v0.1.27) |

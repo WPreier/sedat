@@ -519,12 +519,11 @@ where
                     "proxied"
                 );
             }
-            let bytes = body
-                .collect()
-                .await
-                .map(|c| c.to_bytes())
-                .unwrap_or_default();
-            Ok(Response::from_parts(parts, full_body(bytes)))
+            // Pass through without re-buffering so H3 (and others) can stream frames.
+            Ok(Response::from_parts(
+                parts,
+                body.map_err(|never: Infallible| match never {}).boxed(),
+            ))
         }
         Err(e) => {
             if let Some(ref id) = rid {
