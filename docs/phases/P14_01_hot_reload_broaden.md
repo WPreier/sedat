@@ -14,8 +14,9 @@ gates. This step closes the main remaining live gaps called out in IDEAS
 
 ## Still requires process restart
 
-Listen addresses, Landlock/seccomp, metrics sidecar bind, ACME enable/loop,
-`ban_share_path` / share secret (store built at startup).
+Originally: listen, Landlock/seccomp, metrics bind, ACME enable/loop, ban-share.
+**P14.6** hot-reloads ban-share + live ACME knobs; remaining restart-only list is
+in [P14_06_hot_reload_remaining.md](P14_06_hot_reload_remaining.md).
 
 ## Verify
 

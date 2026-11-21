@@ -24,9 +24,37 @@ pub struct Limiter {
     cfg: Mutex<LimitsConfig>,
     active: AtomicUsize,
     ips: DashMap<IpAddr, Mutex<IpLimitState>>,
-    /// Optional file-backed replica ban share (P12.6).
-    /// Path/secret changes still require process restart.
-    share: Option<Arc<BanShareStore>>,
+    /// Optional file-backed replica ban share (P12.6); swapped on reload (P14.6).
+    share: Mutex<Option<Arc<BanShareStore>>>,
+}
+
+/// Result of attempting to hot-swap the ban-share store on reload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BanShareReloadNote {
+    /// Share stayed off.
+    UnchangedOff,
+    /// Share stayed on (rebuilt or same).
+    Replaced,
+    /// Share newly enabled.
+    Enabled,
+    /// Share turned off.
+    Disabled,
+    /// New share config invalid; previous store kept (fail-closed).
+    KeptFailClosed(String),
+}
+
+impl BanShareReloadNote {
+    /// Compact suffix for admin reload replies.
+    #[must_use]
+    pub fn reply_suffix(&self) -> String {
+        match self {
+            Self::UnchangedOff => String::new(),
+            Self::Replaced => " ban_share=replaced".into(),
+            Self::Enabled => " ban_share=enabled".into(),
+            Self::Disabled => " ban_share=disabled".into(),
+            Self::KeptFailClosed(_) => " ban_share=kept_fail_closed".into(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -110,16 +138,39 @@ impl Limiter {
             cfg: Mutex::new(cfg),
             active: AtomicUsize::new(0),
             ips: DashMap::new(),
-            share,
+            share: Mutex::new(share),
         })
     }
 
-    /// Replace live limit knobs after a successful config reload (P14.1).
+    /// Replace live limit knobs after a successful config reload (P14.1 / P14.6).
     ///
-    /// Does not rebuild the ban-share file store — enabling/changing
-    /// `ban_share_path` / secret still needs a process restart.
-    pub fn reconfigure(&self, cfg: LimitsConfig) {
+    /// Also rebuilds the ban-share store when path/secret/poll change. Invalid
+    /// share config keeps the previous store (fail-closed).
+    pub fn reconfigure(&self, cfg: LimitsConfig) -> BanShareReloadNote {
+        let note = self.swap_ban_share(&cfg);
         *self.cfg.lock() = cfg;
+        note
+    }
+
+    fn swap_ban_share(&self, cfg: &LimitsConfig) -> BanShareReloadNote {
+        match BanShareStore::try_from_limits(cfg) {
+            Ok(new_share) => {
+                let mut slot = self.share.lock();
+                let was = slot.is_some();
+                let now = new_share.is_some();
+                *slot = new_share;
+                match (was, now) {
+                    (false, false) => BanShareReloadNote::UnchangedOff,
+                    (false, true) => BanShareReloadNote::Enabled,
+                    (true, false) => BanShareReloadNote::Disabled,
+                    (true, true) => BanShareReloadNote::Replaced,
+                }
+            }
+            Err(e) => {
+                warn!(error = %e, "ban share reload rejected; previous store kept");
+                BanShareReloadNote::KeptFailClosed(e)
+            }
+        }
     }
 
     /// Snapshot of the live limits (for tests / status).
@@ -131,7 +182,7 @@ impl Limiter {
     /// Whether a shared ban file is configured.
     #[must_use]
     pub fn ban_share_enabled(&self) -> bool {
-        self.share.is_some()
+        self.share.lock().is_some()
     }
 
     /// Try to accept a new connection. Returns `false` if at capacity.
@@ -328,7 +379,8 @@ impl Limiter {
     }
 
     fn maybe_pull_share(&self) {
-        let Some(share) = &self.share else {
+        let share = self.share.lock().clone();
+        let Some(share) = share else {
             return;
         };
         if share.should_pull() {
@@ -337,7 +389,8 @@ impl Limiter {
     }
 
     fn pull_share_now(&self) {
-        let Some(share) = &self.share else {
+        let share = self.share.lock().clone();
+        let Some(share) = share else {
             return;
         };
         match share.pull() {
@@ -391,7 +444,8 @@ impl Limiter {
     }
 
     fn publish_ban_share(&self, ip: IpAddr, until: Instant) {
-        let Some(share) = &self.share else {
+        let share = self.share.lock().clone();
+        let Some(share) = share else {
             return;
         };
         if let Err(e) = share.publish_ban(ip, instant_to_system(until)) {
@@ -400,7 +454,8 @@ impl Limiter {
     }
 
     fn publish_unban_share(&self, ip: IpAddr) {
-        let Some(share) = &self.share else {
+        let share = self.share.lock().clone();
+        let Some(share) = share else {
             return;
         };
         if let Err(e) = share.publish_unban(ip) {
@@ -530,7 +585,7 @@ mod tests {
         });
         let g1 = ConnectionGuard::acquire(lim.clone()).expect("first slot");
         assert!(ConnectionGuard::acquire(lim.clone()).is_none());
-        lim.reconfigure(LimitsConfig {
+        let _ = lim.reconfigure(LimitsConfig {
             max_connections: 2,
             ..Default::default()
         });
@@ -538,6 +593,50 @@ mod tests {
         let g2 = ConnectionGuard::acquire(lim.clone()).expect("second slot after reconfigure");
         assert!(ConnectionGuard::acquire(lim.clone()).is_none());
         drop((g1, g2));
+    }
+
+    #[test]
+    fn reconfigure_ban_share_enable_disable_and_fail_closed() {
+        std::env::remove_var(BAN_SHARE_SECRET_ENV);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bans.json");
+        let lim = Limiter::new(LimitsConfig::default());
+        assert!(!lim.ban_share_enabled());
+
+        let note = lim.reconfigure(LimitsConfig {
+            ban_share_path: path.to_string_lossy().into(),
+            ban_share_secret: "hot-reload-secret-32bytes!!!!!!".into(),
+            ban_share_poll_secs: 1,
+            ..Default::default()
+        });
+        assert_eq!(note, BanShareReloadNote::Enabled);
+        assert!(lim.ban_share_enabled());
+        assert_eq!(note.reply_suffix(), " ban_share=enabled");
+
+        let note = lim.reconfigure(LimitsConfig {
+            ban_share_path: path.to_string_lossy().into(),
+            ban_share_secret: "hot-reload-secret-rotated!!!!!!".into(),
+            ban_share_poll_secs: 2,
+            ..Default::default()
+        });
+        assert_eq!(note, BanShareReloadNote::Replaced);
+        assert!(lim.ban_share_enabled());
+
+        let note = lim.reconfigure(LimitsConfig {
+            ban_share_path: path.to_string_lossy().into(),
+            ban_share_secret: String::new(),
+            ..Default::default()
+        });
+        assert!(matches!(note, BanShareReloadNote::KeptFailClosed(_)));
+        assert!(
+            lim.ban_share_enabled(),
+            "invalid share keeps previous store"
+        );
+        assert_eq!(note.reply_suffix(), " ban_share=kept_fail_closed");
+
+        let note = lim.reconfigure(LimitsConfig::default());
+        assert_eq!(note, BanShareReloadNote::Disabled);
+        assert!(!lim.ban_share_enabled());
     }
 
     #[test]

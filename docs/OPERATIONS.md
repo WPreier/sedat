@@ -28,7 +28,7 @@ docker compose -f docker-compose.dev.yml up --build
 - User config: `--config PATH` (editable).
 - Active copy: `.sedat.active.toml` next to state dir (mode `0600`).
 - Reset: `sedat --resetconfig --config PATH`.
-- Reload: admin `reload` or Unix **SIGHUP** — fail-closed; live limits + static TLS swap (P14.1); emits **security-diff audit** (`sedat::audit`).
+- Reload: admin `reload` or Unix **SIGHUP** — fail-closed; live limits + ban-share + static TLS + ACME knobs when the loop started at boot (P14.1/P14.6); emits **security-diff audit** (`sedat::audit`). Restart still required for listen/sandbox/metrics bind and ACME enable-from-cold.
 
 ## Listeners
 

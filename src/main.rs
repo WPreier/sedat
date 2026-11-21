@@ -106,6 +106,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
 
     let mut tls_state: Option<TlsState> = None;
     let mut tls_listener = None;
+    let mut acme_mgr: Option<Arc<AcmeManager>> = None;
 
     if cfg.tls.enabled || cfg.acme.enabled {
         if let (Some(cert), Some(key)) = (&cfg.tls.cert_path, &cfg.tls.key_path) {
@@ -114,8 +115,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             tls_state = Some(TlsState::new(sc));
         } else if cfg.acme.enabled {
             let paths = AcmePaths::new(&cfg.server.state_dir);
-            let dns = acme::dns_from_config(&cfg.acme);
-            let mgr = AcmeManager::new(cfg.acme.clone(), paths, dns, None);
+            let mgr = AcmeManager::new(cfg.acme.clone(), paths, None);
             mgr.install_self_signed_for_domains()
                 .await
                 .map_err(anyhow::Error::msg)?;
@@ -126,11 +126,11 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             let mgr = AcmeManager::new(
                 cfg.acme.clone(),
                 AcmePaths::new(&cfg.server.state_dir),
-                acme::dns_from_config(&cfg.acme),
                 Some(ts.clone()),
             );
             tls_state = Some(ts);
             let mgr = Arc::new(mgr);
+            acme_mgr = Some(mgr.clone());
             tokio::spawn(mgr.renewal_loop());
         } else {
             // Dev convenience: generate ephemeral self-signed when TLS enabled without paths.
@@ -193,9 +193,9 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
         audit.emit_startup(VERSION);
     }
     let state = ProxyState::with_audit(cfg.clone(), audit.clone());
-    let acme_status = None;
+    let acme_status = acme_mgr.as_ref().map(|m| m.status.clone());
 
-    // Admin socket + optional loopback metrics sidecar + SIGHUP reload (P14.1)
+    // Admin socket + optional loopback metrics sidecar + SIGHUP reload (P14.1/P14.6)
     {
         let admin_state = AdminState {
             user_config,
@@ -204,6 +204,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             tokens: admin::LiveAdminTokens::from_config(&cfg),
             limiter: state.limiter.clone(),
             tls: tls_state.clone(),
+            acme: acme_mgr,
             acme_status,
             audit,
             started_at: admin::now_start(),

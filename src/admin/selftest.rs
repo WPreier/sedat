@@ -578,6 +578,7 @@ mod tests {
             tokens,
             limiter: Limiter::new(Default::default()),
             tls: None,
+            acme: None,
             acme_status: None,
             audit: AuditSink::disabled(),
             started_at: now_start(),

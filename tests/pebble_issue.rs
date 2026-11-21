@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use sedat::acme::{self, AcmeManager, AcmePaths, FileDnsProvider};
+use sedat::acme::{self, AcmeManager, AcmePaths};
 use sedat::config::AcmeConfig;
 
 #[tokio::test]
@@ -35,8 +35,7 @@ async fn pebble_dns01_issues_certificate() {
         ..Default::default()
     };
     let paths = AcmePaths::new(&state);
-    let dns = Box::new(FileDnsProvider::new(dns_file));
-    let mgr = AcmeManager::new(cfg, paths.clone(), dns, None);
+    let mgr = AcmeManager::new(cfg, paths.clone(), None);
 
     // Pebble uses a private CA — instant-acme may need insecure TLS to the directory.
     // Retry a few times while compose comes up.
