@@ -36,7 +36,9 @@ services:
       TRUST_CIDRS: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"
 
   pebble:
-    image: ghcr.io/letsencrypt/pebble:latest
+    # Pin: `:latest` adds dns-persist-01 (breaks instant-acme 0.7 token deser) and
+    # requires User-Agent; 2.7.0 is enough for CI with PEBBLE_VA_ALWAYS_VALID=1.
+    image: ghcr.io/letsencrypt/pebble:2.7.0
     # Image ENTRYPOINT is `/app`; do not prefix `pebble` (newer images reject it).
     command: ["-config", "/test/config/pebble-config.json"]
     ports:

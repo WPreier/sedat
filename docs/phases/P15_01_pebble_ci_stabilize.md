@@ -2,33 +2,32 @@
 
 ## Summary
 
-The GitHub Actions `pebble-issue` job often failed after “Container Started”
-because `curl https://localhost:14000/dir` never became ready (exit 7). Root
-cause: newer `ghcr.io/letsencrypt/pebble` images use **ENTRYPOINT `/app`**, so
-Compose must pass flags only (`-config …`), not a leading `pebble` binary name.
-The old `-dnsserver 10.30.50.3:8053` also pointed at a non-existent host; with
-`PEBBLE_VA_ALWAYS_VALID=1` a custom DNS server is unnecessary.
+Newer `ghcr.io/letsencrypt/pebble` broke the CI job in stages:
+
+| Failure | Cause | Fix |
+|---------|-------|-----|
+| Directory never ready (`curl` exit 7) | Compose prefixed `pebble` but image **ENTRYPOINT is `/app`** | Flags-only `command`; drop bogus `-dnsserver` |
+| `missing field newNonce` | Pebble **requires `User-Agent`**; problem JSON misread as Directory | Inject `User-Agent: sedat-acme/0.1` in `acme_http_client` |
+| `missing field token` (authz) | `:latest` offers `dns-persist-01` without `token`; `instant-acme` 0.7 rejects | Pin image to `2.7.0` (later: upgrade `instant-acme` ≥ 0.8.5) |
 
 | Change | Detail |
 |--------|--------|
+| Compose `pebble.image` | Pin `ghcr.io/letsencrypt/pebble:2.7.0` |
 | Compose `pebble.command` | `["-config", "/test/config/pebble-config.json"]` |
-| CI wait loop | Fail fast if container exits; dump `ps` + logs on timeout |
-| Compose `pebble-issue` | Explicit `PATH` + `entrypoint: bash` + `scripts/compose_pebble_issue.sh` |
-| CI job soft-fail | `continue-on-error: true` so residual flakes do not block merges |
-| Docs | OPERATIONS + this phase note |
+| CI wait | Fail fast + dump `ps`/logs; hard gate (no soft-fail) |
+| Compose `pebble-issue` | Explicit `PATH`; bash **without** `-l`; `scripts/compose_pebble_issue.sh` |
+| ACME client | Always send `User-Agent` for Pebble |
 
-Local one-shot uses the official `rust` image (cargo on `PATH`). Do **not**
-override the image entrypoint to something that drops `/usr/local/cargo/bin`
-(that yields `cargo: command not found` before any ACME assertion runs).
+Local: do not use `bash -lc` as rust-image entrypoint (login shell resets
+`PATH` → `cargo: command not found`).
 
 ## Verify
 
 ```bash
 docker compose -f docker-compose.dev.yml --profile acme up -d pebble
-# wait until:
-curl -skf https://localhost:14000/dir
+curl -skf -A "sedat-acme/0.1" https://localhost:14000/dir
+PEBBLE_DIRECTORY=https://localhost:14000/dir \
+  SEDAT_PEBBLE_ISSUE_STATE=/tmp/sedat-pebble \
+  cargo test --test pebble_issue -- --ignored --nocapture
 docker compose -f docker-compose.dev.yml --profile acme down
 ```
-
-CI job `Pebble ACME issuance` should reach the directory probe and run
-`cargo test --test pebble_issue -- --ignored`.
