@@ -168,12 +168,13 @@ sedat [--config PATH] [--listen ADDR] [--resetconfig] [--validate] [--migrate-co
 
 Unix **SIGHUP** or admin `reload` re-reads the user config (same code path).
 On failure, active config is unchanged. On success: routes/proxy settings via
-live `ArcSwap`, **limits** via `Limiter::reconfigure`, audit JSONL path/size/age,
-admin token gate, and **static TLS** cert/key swap when `tls.cert_path` /
-`tls.key_path` are set. Security-diff audit is emitted (P09.7).
+live `ArcSwap`, **limits** + **ban-share** via `Limiter::reconfigure` (invalid
+share config keeps the previous store), audit JSONL path/size/age, admin token
+gate, **static TLS** cert/key swap when paths are set, and **live ACME knobs**
+when the renewal loop was started at boot. Security-diff audit is emitted (P09.7).
 
 **Still needs restart:** listen addresses, Landlock/seccomp, metrics sidecar bind,
-ACME enable/renewal loop, ban-share store path/secret.
+and enabling ACME when it was off at process start (no manager to attach).
 
 **Token-only (P12.3):** admin `reload-token` re-reads token sources into the live
 gate without reloading routes/certs. Prefer this when rotating secrets. Full

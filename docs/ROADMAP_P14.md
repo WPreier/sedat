@@ -14,6 +14,7 @@ P14.2 H3 full request proxy      ← done (v0.1.26; h3-quinn 0.0.10)
 P14.3 H3 streamed bodies         ← done (v0.1.27)
 P14.4 TCP upstream body stream   ← done (v0.1.28)
 P14.5 Upstream chunked decode    ← done (v0.1.29)
+P14.6 Hot-reload remaining knobs ← done (v0.1.30)
 … later: remaining ops/hardening from IDEAS …
 ```
 
@@ -59,6 +60,14 @@ P14.5 Upstream chunked decode    ← done (v0.1.29)
 | **Behavior** | Decode upstream `Transfer-Encoding: chunked` into streamed payload; TE > CL |
 | **Phase note** | [phases/P14_05_upstream_chunked_decode.md](phases/P14_05_upstream_chunked_decode.md) |
 
+### P14.6 – Hot-reload remaining knobs
+
+| | |
+|--|--|
+| **Status** | **done** (v0.1.30) |
+| **Behavior** | Ban-share store swap (fail-closed) + live ACME config when loop started; document remaining restart-only |
+| **Phase note** | [phases/P14_06_hot_reload_remaining.md](phases/P14_06_hot_reload_remaining.md) |
+
 ## Status board
 
 | Step | Item | Status |
@@ -68,3 +77,4 @@ P14.5 Upstream chunked decode    ← done (v0.1.29)
 | 3 | H3 streamed bodies | **done** (v0.1.27) |
 | 4 | TCP upstream body streaming | **done** (v0.1.28) |
 | 5 | Upstream chunked decode | **done** (v0.1.29) |
+| 6 | Hot-reload remaining knobs | **done** (v0.1.30) |

@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.30] – 2026-11-21
+
+### Changed
+
+- **P14.6 Hot-reload remaining knobs:** admin/`SIGHUP` reload hot-swaps ban-share
+  store (invalid config keeps previous — fail-closed) and live ACME knobs when
+  the renewal loop was started at boot (`enabled=false` idles). Still restart-only:
+  listen binds, Landlock/seccomp, metrics bind, ACME enable from cold. Phase note
+  [docs/phases/P14_06_hot_reload_remaining.md](docs/phases/P14_06_hot_reload_remaining.md).
+
 ## [0.1.29] – 2026-11-21
 
 ### Added

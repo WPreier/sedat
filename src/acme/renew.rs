@@ -3,6 +3,7 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
+use arc_swap::ArcSwap;
 use tracing::{info, warn};
 
 use crate::config::AcmeConfig;
@@ -14,7 +15,7 @@ use super::ari::{
 };
 use super::ari_fetch::{fetch_ari_for_cert, fetch_renewal_info_base};
 use super::dns::DnsProvider;
-use super::{directory_url, persist_cert, AcmePaths};
+use super::{directory_url, dns_from_config, persist_cert, AcmePaths};
 
 /// Observable ACME status for admin socket.
 #[derive(Debug, Clone, Default)]
@@ -33,12 +34,10 @@ pub struct AcmeStatus {
 
 /// Manages ACME lifecycle; on failure keeps previous cert in [`TlsState`].
 pub struct AcmeManager {
-    /// Config snapshot.
-    pub cfg: AcmeConfig,
+    /// Live ACME config (hot-swapped on admin/SIGHUP reload — P14.6).
+    pub cfg: Arc<ArcSwap<AcmeConfig>>,
     /// Persistence paths.
     pub paths: AcmePaths,
-    /// DNS provider.
-    pub dns: Box<dyn DnsProvider>,
     /// Optional TLS hot-swap target.
     pub tls: Option<TlsState>,
     /// Status.
@@ -46,18 +45,12 @@ pub struct AcmeManager {
 }
 
 impl AcmeManager {
-    /// Construct manager.
-    pub fn new(
-        cfg: AcmeConfig,
-        paths: AcmePaths,
-        dns: Box<dyn DnsProvider>,
-        tls: Option<TlsState>,
-    ) -> Self {
+    /// Construct manager (DNS provider is built from live config per order).
+    pub fn new(cfg: AcmeConfig, paths: AcmePaths, tls: Option<TlsState>) -> Self {
         let directory = directory_url(&cfg.directory);
         Self {
-            cfg,
+            cfg: Arc::new(ArcSwap::from_pointee(cfg)),
             paths,
-            dns,
             tls,
             status: Arc::new(parking_lot::Mutex::new(AcmeStatus {
                 directory,
@@ -66,18 +59,37 @@ impl AcmeManager {
         }
     }
 
+    /// Replace live ACME knobs used by the renewal loop (fail-open on values;
+    /// enabling ACME when the loop was never started still needs a process restart).
+    pub fn replace_config(&self, cfg: AcmeConfig) {
+        let directory = directory_url(&cfg.directory);
+        self.status.lock().directory = directory;
+        self.cfg.store(Arc::new(cfg));
+    }
+
+    /// Snapshot of live ACME config.
+    #[must_use]
+    pub fn config_snapshot(&self) -> AcmeConfig {
+        (*self.cfg.load_full()).clone()
+    }
+
     /// Attempt full DNS-01 certificate obtain via `instant-acme`.
     ///
     /// On any failure, previous certificate remains active (fail-closed).
     /// With Pebble + `PEBBLE_VA_ALWAYS_VALID=1`, the file DNS provider is enough for CI.
     pub async fn order_once(&self) -> Result<(), String> {
-        if self.cfg.domains.is_empty() {
+        let cfg = self.config_snapshot();
+        if !cfg.enabled {
+            return Err("ACME disabled in live config".into());
+        }
+        if cfg.domains.is_empty() {
             return Err("no ACME domains configured".into());
         }
-        let directory = directory_url(&self.cfg.directory);
-        info!(%directory, domains = ?self.cfg.domains, "ACME order starting");
+        let directory = directory_url(&cfg.directory);
+        info!(%directory, domains = ?cfg.domains, "ACME order starting");
+        let dns = dns_from_config(&cfg);
 
-        match issue_certificate(&self.cfg, &self.paths, self.dns.as_ref(), &directory).await {
+        match issue_certificate(&cfg, &self.paths, dns.as_ref(), &directory).await {
             Ok((cert_pem, key_pem)) => {
                 self.install_cert(&cert_pem, &key_pem)?;
                 Ok(())
@@ -110,13 +122,15 @@ impl AcmeManager {
 
     /// Install a self-signed cert for configured domains (dev / offline tests).
     pub async fn install_self_signed_for_domains(&self) -> Result<(), String> {
-        let names = if self.cfg.domains.is_empty() {
+        let cfg = self.config_snapshot();
+        let names = if cfg.domains.is_empty() {
             vec!["localhost".to_string()]
         } else {
-            self.cfg.domains.clone()
+            cfg.domains.clone()
         };
         let domain = names[0].clone();
-        let _ = self.dns.present(&domain, "self-signed-dev").await;
+        let dns = dns_from_config(&cfg);
+        let _ = dns.present(&domain, "self-signed-dev").await;
         let cert = rcgen::generate_simple_self_signed(names).map_err(|e| e.to_string())?;
         let cert_pem = cert.cert.pem().into_bytes();
         let key_pem = cert.key_pair.serialize_pem().into_bytes();
@@ -127,11 +141,17 @@ impl AcmeManager {
     ///
     /// Wakes at least every 24h to re-fetch ARI / re-evaluate. Failures use
     /// exponential backoff; previous cert is always retained on order errors.
+    /// When live config sets `enabled = false`, the loop idles without ordering.
     pub async fn renewal_loop(self: Arc<Self>) {
         let mut backoff = Duration::from_secs(30);
         let max_backoff = Duration::from_secs(3600);
         let max_sleep = Duration::from_secs(24 * 3600);
         loop {
+            if !self.config_snapshot().enabled {
+                info!("ACME disabled in live config; idle");
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                continue;
+            }
             if !self.paths.cert_path.exists() || !self.paths.key_path.exists() {
                 info!("no certificate on disk; issuing");
                 match self.order_once().await {
@@ -167,13 +187,14 @@ impl AcmeManager {
 
     /// Decide whether to renew now or sleep (ARI → expiry fallback → 24h).
     pub async fn plan_renewal(&self) -> RenewSchedule {
+        let cfg = self.config_snapshot();
         let now = SystemTime::now();
         let cert_pem = std::fs::read(&self.paths.cert_path).ok();
         let not_after = cert_pem.as_ref().and_then(|p| not_after_from_pem(p).ok());
 
         let mut ari_window = None;
         let mut ari_active = false;
-        if self.cfg.ari {
+        if cfg.ari {
             if let Some(ref pem) = cert_pem {
                 match self.try_fetch_ari(pem).await {
                     Ok(Some(window)) => {
@@ -194,7 +215,7 @@ impl AcmeManager {
             now,
             ari_window.as_ref(),
             not_after,
-            self.cfg.renew_days_before,
+            cfg.renew_days_before,
             random_jitter_01(),
         );
         {
@@ -212,7 +233,8 @@ impl AcmeManager {
         &self,
         cert_pem: &[u8],
     ) -> Result<Option<super::ari::AriWindow>, String> {
-        let directory = directory_url(&self.cfg.directory);
+        let cfg = self.config_snapshot();
+        let directory = directory_url(&cfg.directory);
         let Some(base) = fetch_renewal_info_base(&directory).await? else {
             return Ok(None);
         };
@@ -359,7 +381,6 @@ async fn issue_certificate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::acme::FileDnsProvider;
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -368,13 +389,14 @@ mod tests {
         let paths = AcmePaths::new(dir.path());
         let cfg = AcmeConfig {
             domains: vec!["localhost".into()],
+            dns_provider: "file".into(),
+            dns_file: dir.path().join("dns.txt").to_string_lossy().into(),
             ..Default::default()
         };
-        let dns = Box::new(FileDnsProvider::new(dir.path().join("dns.txt")));
         let (cert, key) = crate::tls::generate_self_signed("localhost").unwrap();
         let sc = server_config_from_pem(&cert, &key).unwrap();
         let tls = TlsState::new(sc);
-        let mgr = AcmeManager::new(cfg, paths, dns, Some(tls));
+        let mgr = AcmeManager::new(cfg, paths, Some(tls));
         mgr.install_self_signed_for_domains().await.unwrap();
         assert!(mgr.paths.cert_path.exists());
     }
@@ -384,17 +406,39 @@ mod tests {
         let dir = tempdir().unwrap();
         let paths = AcmePaths::new(dir.path());
         let cfg = AcmeConfig {
+            enabled: true,
             domains: vec!["localhost".into()],
             directory: "https://127.0.0.1:1/dir".into(), // unreachable
+            dns_provider: "file".into(),
             ..Default::default()
         };
-        let dns = Box::new(FileDnsProvider::new(dir.path().join("dns.txt")));
         let (cert, key) = crate::tls::generate_self_signed("localhost").unwrap();
         persist_cert(&paths, &cert, &key).unwrap();
         let sc = server_config_from_pem(&cert, &key).unwrap();
         let tls = TlsState::new(sc);
-        let mgr = AcmeManager::new(cfg, paths.clone(), dns, Some(tls));
+        let mgr = AcmeManager::new(cfg, paths.clone(), Some(tls));
         let _ = mgr.order_once().await;
         assert!(paths.cert_path.exists());
+    }
+
+    #[test]
+    fn replace_config_updates_live_snapshot() {
+        let dir = tempdir().unwrap();
+        let paths = AcmePaths::new(dir.path());
+        let cfg = AcmeConfig {
+            enabled: true,
+            renew_days_before: 30,
+            ..Default::default()
+        };
+        let mgr = AcmeManager::new(cfg, paths, None);
+        assert_eq!(mgr.config_snapshot().renew_days_before, 30);
+        mgr.replace_config(AcmeConfig {
+            enabled: true,
+            renew_days_before: 14,
+            directory: "staging".into(),
+            ..Default::default()
+        });
+        assert_eq!(mgr.config_snapshot().renew_days_before, 14);
+        assert!(mgr.status.lock().directory.contains("acme-staging") || !mgr.status.lock().directory.is_empty());
     }
 }

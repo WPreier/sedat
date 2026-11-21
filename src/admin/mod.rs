@@ -39,7 +39,9 @@ pub struct AdminState {
     pub limiter: Arc<Limiter>,
     /// Optional TLS hot-swap target for static cert reload (P14.1).
     pub tls: Option<TlsState>,
-    /// ACME status (optional).
+    /// Running ACME manager for live config swap (P14.6); `None` if ACME never started.
+    pub acme: Option<Arc<crate::acme::AcmeManager>>,
+    /// ACME status (optional; usually `acme.status` when ACME started).
     pub acme_status: Option<Arc<parking_lot::Mutex<AcmeStatus>>>,
     /// Shared JSONL audit sink.
     pub audit: AuditSink,
@@ -360,9 +362,11 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
 
 /// Apply a validated config reload (admin `reload` or Unix SIGHUP).
 ///
-/// Updates: routes/proxy settings via `config` ArcSwap, live limits, audit sink,
-/// admin token gate, and optional static TLS certs. Listen addresses, sandbox,
-/// metrics bind, and ban-share store still require a process restart.
+/// Updates: routes/proxy via `config` ArcSwap, live limits, ban-share store,
+/// audit sink, admin token gate, static TLS, and live ACME knobs (when the
+/// renewal loop was started at boot). Still restart-only: listen addresses,
+/// Landlock/seccomp, metrics bind address changes, and enabling ACME when it
+/// was off at process start.
 pub fn apply_live_reload(state: &AdminState) -> String {
     match config::try_reload(&state.user_config, &state.state_dir) {
         Ok(active) => {
@@ -385,8 +389,12 @@ pub fn apply_live_reload(state: &AdminState) -> String {
             ) {
                 warn!(error = %e, "audit jsonl reconfigure failed");
             }
-            state.limiter.reconfigure(active.config.limits.clone());
+            let ban_note = state
+                .limiter
+                .reconfigure(active.config.limits.clone())
+                .reply_suffix();
             let cert_note = reload_static_tls(state, &active.config);
+            let acme_note = reload_acme(state, &active.config);
             let overlap = active.config.server.admin_token_overlap_secs;
             let token_note = match state.tokens.reload_from_config(&active.config, overlap) {
                 Ok(outcome) => {
@@ -406,9 +414,25 @@ pub fn apply_live_reload(state: &AdminState) -> String {
             };
             state.audit.emit_config_reload(&changes, &summary);
             state.config.store(Arc::new(active.config));
-            format!("OK reload audit={summary}{token_note}{cert_note}\n")
+            format!("OK reload audit={summary}{token_note}{cert_note}{ban_note}{acme_note}\n")
         }
         Err(e) => format!("ERR reload: {e}\n"),
+    }
+}
+
+/// Hot-swap ACME knobs when a renewal loop is already running.
+fn reload_acme(state: &AdminState, cfg: &SedatConfig) -> String {
+    match (&state.acme, cfg.acme.enabled) {
+        (Some(mgr), _) => {
+            mgr.replace_config(cfg.acme.clone());
+            info!(enabled = cfg.acme.enabled, "ACME live config swapped on reload");
+            " acme=config_swapped".into()
+        }
+        (None, true) => {
+            warn!("ACME enabled in new config but loop was not started at boot; restart required");
+            " acme=restart_required_to_enable".into()
+        }
+        (None, false) => String::new(),
     }
 }
 
@@ -582,6 +606,7 @@ mod tests {
             tokens,
             limiter: Limiter::new(Default::default()),
             tls: None,
+            acme: None,
             acme_status: None,
             audit,
             started_at: now_start(),
@@ -898,6 +923,7 @@ upstream = "http://127.0.0.1:9"
             tokens,
             limiter: limiter.clone(),
             tls: Some(tls_state.clone()),
+            acme: None,
             acme_status: None,
             audit: AuditSink::disabled(),
             started_at: now_start(),
