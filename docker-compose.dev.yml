@@ -37,7 +37,8 @@ services:
 
   pebble:
     image: ghcr.io/letsencrypt/pebble:latest
-    command: pebble -config /test/config/pebble-config.json -dnsserver 10.30.50.3:8053
+    # Image ENTRYPOINT is `/app`; do not prefix `pebble` (newer images reject it).
+    command: ["-config", "/test/config/pebble-config.json"]
     ports:
       - "14000:14000"
       - "15000:15000"
