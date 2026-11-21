@@ -60,8 +60,16 @@ impl PebbleClient {
 impl HttpClient for PebbleClient {
     fn request(
         &self,
-        req: Request<Full<Bytes>>,
+        mut req: Request<Full<Bytes>>,
     ) -> Pin<Box<dyn Future<Output = Result<BytesResponse, AcmeError>> + Send>> {
+        // Newer Pebble rejects requests without User-Agent (returns a problem
+        // document that then fails DirectoryUrls deserialization as "missing newNonce").
+        if !req.headers().contains_key(http::header::USER_AGENT) {
+            req.headers_mut().insert(
+                http::header::USER_AGENT,
+                http::HeaderValue::from_static("sedat-acme/0.1"),
+            );
+        }
         let fut = self.0.request(req);
         Box::pin(async move {
             match fut.await {

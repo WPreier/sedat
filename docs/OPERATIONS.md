@@ -112,11 +112,11 @@ Seccomp modes: [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md).
   `pebble` (container exits immediately; directory probe never succeeds).
   With `PEBBLE_VA_ALWAYS_VALID=1`, a custom `-dnsserver` is not required.
 - Local `pebble-issue` service: keep the official `rust` image PATH
-  (`/usr/local/cargo/bin`); overriding entrypoint without that PATH causes
-  `cargo: command not found` before issuance runs.
-- **Merge gate:** job uses `continue-on-error: true` so residual ACME flakes do
-  not block merges; treat Linux + Compose as required. Still fix real failures
-  (ENTRYPOINT / wait diagnostics) rather than ignoring them forever.
+  (`/usr/local/cargo/bin`). Prefer `bash -c` / plain `bash` over `bash -lc`
+  (login shells reset PATH → `cargo: command not found`).
+- ACME client always sends a `User-Agent` (newer Pebble requires it).
+- Compose pins `ghcr.io/letsencrypt/pebble:2.7.0` so `instant-acme` 0.7 is not
+  broken by `:latest` `dns-persist-01` challenges (missing `token`).
   See [phases/P15_01_pebble_ci_stabilize.md](phases/P15_01_pebble_ci_stabilize.md).
 
 ```bash

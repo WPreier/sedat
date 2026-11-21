@@ -9,7 +9,7 @@ commit + push/PR, wait for review.
 ## Suggested order
 
 ```text
-P15.1 Stabilize Pebble CI        ← done (v0.1.31)
+P15.1 Stabilize Pebble CI        ← done (v0.1.31–0.1.32)
 … later: remaining ops/hardening from IDEAS …
 ```
 
@@ -19,12 +19,12 @@ P15.1 Stabilize Pebble CI        ← done (v0.1.31)
 
 | | |
 |--|--|
-| **Status** | **done** (v0.1.31) |
-| **Behavior** | Fix Compose Pebble command for current image ENTRYPOINT; harden CI wait/diagnostics so ACME issuance is reliable |
+| **Status** | **done** (v0.1.32) |
+| **Behavior** | Fix Compose Pebble ENTRYPOINT + User-Agent; pin `pebble:2.7.0`; harden CI wait/diagnostics |
 | **Phase note** | [phases/P15_01_pebble_ci_stabilize.md](phases/P15_01_pebble_ci_stabilize.md) |
 
 ## Status board
 
 | Step | Item | Status |
 |------|------|--------|
-| 1 | Stabilize Pebble CI | **done** (v0.1.31) |
+| 1 | Stabilize Pebble CI | **done** (v0.1.32) |
