@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.28] – 2026-11-21
+
+### Changed
+
+- **P14.4 TCP upstream body streaming:** outbound HTTP/1.1 uses chunked
+  transfer (no full request buffer); upstream responses stream via channel
+  under `max_body_bytes`. Oversize is fail-closed (**413**). Phase note
+  [docs/phases/P14_04_tcp_upstream_stream.md](docs/phases/P14_04_tcp_upstream_stream.md).
+
 ## [0.1.27] – 2026-11-21
 
 ### Changed
