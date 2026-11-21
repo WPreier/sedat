@@ -12,8 +12,8 @@ See [ROADMAP_P09.md](ROADMAP_P09.md) and [ROADMAP_P10.md](ROADMAP_P10.md). Highl
 
 ## Deferred / Open backlog
 
-Durable list of follow-ups after **P10 complete**. Promoted work lives in
-[ROADMAP_P11.md](ROADMAP_P11.md).
+Durable list of follow-ups after **P10/P11**. Active promotion:
+[ROADMAP_P11.md](ROADMAP_P11.md) (done), [ROADMAP_P12.md](ROADMAP_P12.md).
 
 ### Explicitly deferred / declined
 
@@ -27,8 +27,8 @@ Durable list of follow-ups after **P10 complete**. Promoted work lives in
 | Item | Notes | Suggested |
 |------|-------|-----------|
 | Admin `bans` / `unban <ip>` | List + clear temporary bans over admin socket | **done P11.1** |
-| Ban-State über Replicas teilen | Shared ban map (Redis/etc.) for multi-instance | later |
-| Sliding ban / Verlängerung bei Strike während Ban | Extend TTL if abuse continues while banned | later |
+| Ban-State über Replicas teilen | Shared ban map (Redis/etc.) for multi-instance | P12.6 |
+| Sliding ban / Verlängerung bei Strike während Ban | Extend TTL if abuse continues while banned | **P12.2** |
 | Doc formula: `limits.max_connections` ↔ `MemoryMax` / `LimitNOFILE` | Ops guidance aligning TOML + cgroup | **done P11.5** |
 | Multiple DNS providers | Trait ready; Cloudflare first | as needed |
 
@@ -38,14 +38,14 @@ Durable list of follow-ups after **P10 complete**. Promoted work lives in
 |------|-------|-----------|
 | Prometheus counter for `audit_dropped` | `sedat_audit_dropped_total` on admin/metrics | **done P11.4** |
 | PROXY-Rejects (pre-HTTP) as JSONL event | JSONL `proxy_reject` with reason/stage | **done P11.3** |
-| Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | later |
+| Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | P12.4 |
 
 ### Admin / auth / selftest
 
 | Item | Notes | Suggested |
 |------|-------|-----------|
-| Token auch für Metrics-Sidecar | Auth on loopback `/metrics` when token set | later |
-| Token-Rotation ohne Reload | Hot-swap admin token (file watch / admin cmd) | later |
+| Token auch für Metrics-Sidecar | Auth on loopback `/metrics` when token set | **done P12.1** |
+| Token-Rotation ohne Reload | Hot-swap admin token (file watch / admin cmd) | P12.3 |
 | Selftest: Upstream-TCP + TLS-ALPN | Deeper connectivity checks | **done P11.6** |
 | `selftest --json` | Machine-readable selftest output | **done P11.6** |
 | Allowlist parseable check in selftest | Validate `upstream_allowlist` / PROXY CIDRs | **done P11.6** |
@@ -54,7 +54,7 @@ Durable list of follow-ups after **P10 complete**. Promoted work lives in
 
 | Item | Notes | Suggested |
 |------|-------|-----------|
-| Upstream pin: Hostname-Literal + periodisches Re-Resolve | Pin by name + refresh DNS on interval | later |
+| Upstream pin: Hostname-Literal + periodisches Re-Resolve | Pin by name + refresh DNS on interval | P12.5 |
 | Request-ID on all early deny paths | Close remaining gaps (pre-hyper 400/431) | **done P11.2** |
 | Hot-reload without process restart | Routes/certs partially done; broaden | partial |
 

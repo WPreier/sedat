@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.17] – 2026-11-21
+
+### Added
+
+- **P12.1 Metrics sidecar token:** when an admin token is set, loopback
+  `GET /metrics` requires `Authorization: Bearer <token>` (fail-closed);
+  JSONL `metrics_auth_fail` on reject. Admin socket AUTH unchanged. Phase note
+  [docs/phases/P12_01_metrics_sidecar_token.md](docs/phases/P12_01_metrics_sidecar_token.md).
+- Roadmap [docs/ROADMAP_P12.md](docs/ROADMAP_P12.md).
+
 ## [0.1.16] – 2026-11-21
 
 ### Added

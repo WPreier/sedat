@@ -68,8 +68,8 @@ Applied **after** privilege drop. Unsupported kernels: `auto` skips; `required` 
 
 - Control plane: Unix admin socket — `status`, `health`, `metrics`, `reload`, `cert`, `selftest` (+ `AUTH` when token configured).
 - Socket ACL: owner `0600`, or `0660` when `server.admin_group` is set.
-- **Admin token (P10.4):** when `SEDAT_ADMIN_TOKEN` / `admin_token_file` / `admin_token` is set, require `AUTH <token>` (constant-time verify). Empty token = FS ACL only (document as weak for production). Failed auth audited as `admin_auth_fail`.
-- Optional `server.metrics_listen = "127.0.0.1:9090"` loopback Prometheus sidecar (`GET /metrics`) — not gated by admin token.
+- **Admin token (P10.4 / P12.1):** when `SEDAT_ADMIN_TOKEN` / `admin_token_file` / `admin_token` is set, require `AUTH <token>` on the Unix socket (constant-time verify) and `Authorization: Bearer <token>` on the loopback metrics sidecar. Empty token = FS ACL / loopback-only (document as weak for production). Failed auth audited as `admin_auth_fail` / `metrics_auth_fail`.
+- Optional `server.metrics_listen = "127.0.0.1:9090"` loopback Prometheus sidecar (`GET /metrics`).
 - Scrape without sidecar: `scripts/prometheus_admin_scrape.sh` (pass token via `SEDAT_ADMIN_TOKEN` if required).
 - **Never** expose SeDat metrics/health as a public HTTP control plane.
 

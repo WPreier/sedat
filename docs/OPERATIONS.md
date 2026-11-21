@@ -36,6 +36,7 @@ docker compose -f docker-compose.dev.yml up --build
 - HTTPS: `:443` (h1/h2); optional UDP `:443` for HTTP/3 when `experimental.h3 = true`.
 - Admin: Unix socket path from config (e.g. `/run/sedat/admin.sock`).
 - Optional metrics sidecar: `server.metrics_listen = "127.0.0.1:9090"` (loopback only).
+  When an admin token is set, scrapes need `Authorization: Bearer <token>` (P12.1).
 
 ## systemd
 
@@ -153,8 +154,10 @@ echo selftest| socat - UNIX-CONNECT:/run/sedat/admin.sock
 
 - Admin commands `health` / `metrics` (Prometheus text exposition).
 - Optional loopback HTTP sidecar (`GET /metrics`) when `metrics_listen` is set.
+  With admin token configured: `Authorization: Bearer …` required (P12.1); see
+  [phases/P12_01_metrics_sidecar_token.md](phases/P12_01_metrics_sidecar_token.md).
 - Includes `sedat_audit_dropped_total` (P11.4) for JSONL audit drops.
-- Script: `scripts/prometheus_admin_scrape.sh [admin.sock]`.
+- Script: `scripts/prometheus_admin_scrape.sh [admin.sock]` (Unix socket; uses `AUTH`).
 - No built-in public HTTP `/metrics` or `/health` control endpoint.
 
 ## PROXY after TLS
@@ -260,4 +263,4 @@ ban_duration_secs = 60
 
 ## Release notes
 
-Version via Cargo/`--version`. Optional SBOM via `cargo cyclonedx` (documented in Phase 8). Checklist: [phases/P08_e2e_release.md](phases/P08_e2e_release.md). P09: [ROADMAP_P09.md](ROADMAP_P09.md). P10: [ROADMAP_P10.md](ROADMAP_P10.md). P11: [ROADMAP_P11.md](ROADMAP_P11.md).
+Version via Cargo/`--version`. Optional SBOM via `cargo cyclonedx` (documented in Phase 8). Checklist: [phases/P08_e2e_release.md](phases/P08_e2e_release.md). P09: [ROADMAP_P09.md](ROADMAP_P09.md). P10: [ROADMAP_P10.md](ROADMAP_P10.md). P11: [ROADMAP_P11.md](ROADMAP_P11.md). P12: [ROADMAP_P12.md](ROADMAP_P12.md).

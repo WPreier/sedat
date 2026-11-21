@@ -3,7 +3,10 @@
 mod auth;
 mod selftest;
 
-pub use auth::{parse_auth_line, resolve_admin_token, token_matches, ADMIN_TOKEN_ENV};
+pub use auth::{
+    metrics_token_authorized, parse_auth_line, parse_bearer_authorization, resolve_admin_token,
+    token_matches, ADMIN_TOKEN_ENV,
+};
 pub use selftest::{now_start, run_selftest, SelftestCheck, SelftestReport};
 
 use std::path::Path;
@@ -116,17 +119,23 @@ pub async fn serve_admin(socket_path: &Path, state: AdminState) -> std::io::Resu
 ///
 /// Binds only the configured address (validation already enforces loopback). Never a public
 /// control plane — operators should firewall/deny non-loopback at the host level as well.
+///
+/// When an admin token is configured (same sources as the Unix socket), scrapes must send
+/// `Authorization: Bearer <token>` (fail-closed). Empty token config → loopback-only (dev).
 pub async fn serve_metrics_sidecar(addr: std::net::SocketAddr, state: AdminState) -> std::io::Result<()> {
     use hyper::server::conn::http1;
     use hyper::service::service_fn;
-    use hyper::{Method, Request, Response, StatusCode};
+    use hyper::Request;
     use hyper_util::rt::TokioIo;
-    use http_body_util::Full;
-    use bytes::Bytes;
     use std::convert::Infallible;
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    info!(%addr, "metrics sidecar listening (loopback)");
+    let token_required = resolve_admin_token(&state.config.load()).is_some();
+    info!(
+        %addr,
+        token_required,
+        "metrics sidecar listening (loopback)"
+    );
     loop {
         let (stream, peer) = listener.accept().await?;
         if !peer.ip().is_loopback() {
@@ -139,24 +148,65 @@ pub async fn serve_metrics_sidecar(addr: std::net::SocketAddr, state: AdminState
             let svc = service_fn(move |req: Request<hyper::body::Incoming>| {
                 let state = state.clone();
                 async move {
-                    let resp = if req.method() == Method::GET && req.uri().path() == "/metrics" {
-                        Response::builder()
-                            .status(StatusCode::OK)
-                            .header(hyper::header::CONTENT_TYPE, "text/plain; version=0.0.4")
-                            .body(Full::new(Bytes::from(prometheus_text(&state))))
-                            .unwrap()
-                    } else {
-                        Response::builder()
-                            .status(StatusCode::NOT_FOUND)
-                            .body(Full::new(Bytes::from_static(b"not found")))
-                            .unwrap()
-                    };
+                    let auth = req
+                        .headers()
+                        .get(hyper::header::AUTHORIZATION)
+                        .and_then(|v| v.to_str().ok());
+                    let resp = metrics_sidecar_response(
+                        &state,
+                        req.method(),
+                        req.uri().path(),
+                        auth,
+                    );
                     Ok::<_, Infallible>(resp)
                 }
             });
             let _ = http1::Builder::new().serve_connection(io, svc).await;
         });
     }
+}
+
+/// Build the HTTP response for one metrics-sidecar request (testable without a listener).
+#[must_use]
+pub fn metrics_sidecar_response(
+    state: &AdminState,
+    method: &hyper::Method,
+    path: &str,
+    authorization: Option<&str>,
+) -> hyper::Response<http_body_util::Full<bytes::Bytes>> {
+    use http_body_util::Full;
+    use bytes::Bytes;
+    use hyper::{Method, Response, StatusCode};
+
+    if *method != Method::GET || path != "/metrics" {
+        return Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Full::new(Bytes::from_static(b"not found")))
+            .unwrap();
+    }
+
+    let expected = resolve_admin_token(&state.config.load());
+    if !metrics_token_authorized(expected.as_deref(), authorization) {
+        let reason = if expected.is_some() && authorization.is_none() {
+            "metrics_required"
+        } else {
+            "metrics_bad_token"
+        };
+        warn!(target: "sedat::audit", reason, "metrics scrape rejected (auth)");
+        state.audit.emit_metrics_auth_fail(reason);
+        return Response::builder()
+            .status(StatusCode::UNAUTHORIZED)
+            .header(hyper::header::WWW_AUTHENTICATE, "Bearer realm=\"sedat-metrics\"")
+            .header(hyper::header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(Full::new(Bytes::from_static(b"unauthorized")))
+            .unwrap();
+    }
+
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(hyper::header::CONTENT_TYPE, "text/plain; version=0.0.4")
+        .body(Full::new(Bytes::from(prometheus_text(state))))
+        .unwrap()
 }
 
 #[cfg(unix)]
@@ -677,5 +727,72 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let mode = std::fs::metadata(&sock).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o600);
+    }
+
+    #[test]
+    fn metrics_sidecar_open_without_token() {
+        std::env::remove_var(ADMIN_TOKEN_ENV);
+        let state = sample_state();
+        let resp = metrics_sidecar_response(&state, &hyper::Method::GET, "/metrics", None);
+        assert_eq!(resp.status(), hyper::StatusCode::OK);
+        assert!(prometheus_text(&state).contains("sedat_info"));
+    }
+
+    #[test]
+    fn metrics_sidecar_requires_bearer_when_token_set() {
+        std::env::remove_var(ADMIN_TOKEN_ENV);
+        let dir = tempfile::tempdir().unwrap();
+        let audit_path = dir.path().join("a.jsonl");
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let mut cfg = SedatConfig {
+            schema_version: 1,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.admin_token = "metrics-secret".into();
+        let state = sample_state_with(cfg, audit);
+
+        let resp = metrics_sidecar_response(&state, &hyper::Method::GET, "/metrics", None);
+        assert_eq!(resp.status(), hyper::StatusCode::UNAUTHORIZED);
+
+        let resp = metrics_sidecar_response(
+            &state,
+            &hyper::Method::GET,
+            "/metrics",
+            Some("Bearer wrong"),
+        );
+        assert_eq!(resp.status(), hyper::StatusCode::UNAUTHORIZED);
+
+        let resp = metrics_sidecar_response(
+            &state,
+            &hyper::Method::GET,
+            "/metrics",
+            Some("Bearer metrics-secret"),
+        );
+        assert_eq!(resp.status(), hyper::StatusCode::OK);
+
+        // Admin socket still works with AUTH (unchanged).
+        let mut authed = false;
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "status");
+        assert!(r.starts_with("ERR auth required"), "{r}");
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "AUTH metrics-secret");
+        assert_eq!(r, "OK auth\n");
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "health");
+        assert_eq!(r, "OK healthy\n");
+
+        let text = std::fs::read_to_string(&audit_path).unwrap();
+        assert!(text.contains("\"event\":\"metrics_auth_fail\""));
+        assert!(
+            text.contains("\"reason\":\"metrics_required\"")
+                || text.contains("\"reason\":\"metrics_bad_token\"")
+        );
     }
 }

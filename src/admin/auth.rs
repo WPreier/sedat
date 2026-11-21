@@ -53,6 +53,46 @@ pub fn token_matches(provided: &str, expected: &str) -> bool {
     diff == 0
 }
 
+/// Extract a Bearer token from an HTTP `Authorization` header value.
+///
+/// Accepts `Bearer <token>` (case-insensitive scheme). Returns `None` if missing
+/// or not Bearer. Empty token string is returned as `Some("")` for fail-closed
+/// handling by the caller.
+#[must_use]
+pub fn parse_bearer_authorization(header_value: &str) -> Option<&str> {
+    let trimmed = header_value.trim();
+    let (scheme, rest) = trimmed
+        .split_once(char::is_whitespace)
+        .map(|(s, r)| (s, r.trim()))
+        .unwrap_or((trimmed, ""));
+    if scheme.eq_ignore_ascii_case("bearer") {
+        Some(rest)
+    } else {
+        None
+    }
+}
+
+/// Whether a metrics scrape is authorized given the optional expected token.
+///
+/// - `expected = None` → auth disabled (loopback-only still applies at the listener).
+/// - `expected = Some(t)` → require `Authorization: Bearer <t>` (constant-time).
+#[must_use]
+pub fn metrics_token_authorized(expected: Option<&str>, authorization_header: Option<&str>) -> bool {
+    let Some(exp) = expected else {
+        return true;
+    };
+    let Some(raw) = authorization_header else {
+        return false;
+    };
+    let Some(presented) = parse_bearer_authorization(raw) else {
+        return false;
+    };
+    if presented.is_empty() {
+        return false;
+    }
+    token_matches(presented, exp)
+}
+
 /// Parse an `AUTH <token>` line (case-insensitive command, token is rest of line).
 #[must_use]
 pub fn parse_auth_line(line: &str) -> Option<&str> {
@@ -110,5 +150,28 @@ mod tests {
         assert!(resolve_admin_token(&cfg).is_none());
         cfg.server.admin_token = "from-config".into();
         assert_eq!(resolve_admin_token(&cfg).as_deref(), Some("from-config"));
+    }
+
+    #[test]
+    fn bearer_and_metrics_gate() {
+        assert_eq!(
+            parse_bearer_authorization("Bearer secret-token"),
+            Some("secret-token")
+        );
+        assert_eq!(
+            parse_bearer_authorization("bearer  secret-token"),
+            Some("secret-token")
+        );
+        assert!(parse_bearer_authorization("Basic abc").is_none());
+        assert!(parse_bearer_authorization("Bearer").is_some_and(|t| t.is_empty()));
+
+        assert!(metrics_token_authorized(None, None));
+        assert!(metrics_token_authorized(None, Some("Bearer x")));
+        assert!(!metrics_token_authorized(Some("secret"), None));
+        assert!(!metrics_token_authorized(Some("secret"), Some("Bearer wrong")));
+        assert!(metrics_token_authorized(
+            Some("secret"),
+            Some("Bearer secret")
+        ));
     }
 }
