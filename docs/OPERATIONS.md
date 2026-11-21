@@ -107,9 +107,22 @@ Seccomp modes: [phases/P10_09_seccomp_bpf.md](phases/P10_09_seccomp_bpf.md).
 - Account JSON persisted under state dir.
 - Full DNS-01 order/finalize path; on failure previous cert stays active.
 - CI: GitHub Actions job `pebble-issue` and Compose service `pebble-issue` (profile `acme`) with `PEBBLE_VA_ALWAYS_VALID=1` — no LE staging network.
+- Pebble image ENTRYPOINT is `/app`; Compose must pass **flags only**
+  (`command: ["-config", "/test/config/pebble-config.json"]`). Do not prefix
+  `pebble` (container exits immediately; directory probe never succeeds).
+  With `PEBBLE_VA_ALWAYS_VALID=1`, a custom `-dnsserver` is not required.
+- Local `pebble-issue` service: keep the official `rust` image PATH
+  (`/usr/local/cargo/bin`); overriding entrypoint without that PATH causes
+  `cargo: command not found` before issuance runs.
+- **Merge gate:** job uses `continue-on-error: true` so residual ACME flakes do
+  not block merges; treat Linux + Compose as required. Still fix real failures
+  (ENTRYPOINT / wait diagnostics) rather than ignoring them forever.
+  See [phases/P15_01_pebble_ci_stabilize.md](phases/P15_01_pebble_ci_stabilize.md).
 
 ```bash
-docker compose -f docker-compose.dev.yml --profile acme up pebble
+docker compose -f docker-compose.dev.yml --profile acme up -d pebble
+# wait for directory:
+curl -skf https://localhost:14000/dir
 # or one-shot:
 docker compose -f docker-compose.dev.yml --profile acme run --rm pebble-issue
 # local helper:

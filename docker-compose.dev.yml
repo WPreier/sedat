@@ -37,7 +37,8 @@ services:
 
   pebble:
     image: ghcr.io/letsencrypt/pebble:latest
-    command: pebble -config /test/config/pebble-config.json -dnsserver 10.30.50.3:8053
+    # Image ENTRYPOINT is `/app`; do not prefix `pebble` (newer images reject it).
+    command: ["-config", "/test/config/pebble-config.json"]
     ports:
       - "14000:14000"
       - "15000:15000"
@@ -54,6 +55,7 @@ services:
     profiles: ["acme"]
 
   # Optional one-shot issuance against the pebble service (profile acme).
+  # Keeps rust image cargo on PATH; script avoids Compose `$` interpolation traps.
   pebble-issue:
     image: rust:latest
     working_dir: /src
@@ -66,19 +68,10 @@ services:
       PEBBLE_DIRECTORY: https://pebble:14000/dir
       SEDAT_PEBBLE_ISSUE_STATE: /src/state/pebble-ci
       CARGO_TERM_COLOR: always
-    command:
-      - bash
-      - -lc
-      - |
-        set -euo pipefail
-        mkdir -p /src/state/pebble-ci
-        for i in $(seq 1 60); do
-          curl -skf https://pebble:14000/dir >/dev/null && break
-          sleep 1
-        done
-        cargo test --test pebble_issue -- --ignored --nocapture
-        test -f /src/state/pebble-ci/cert.pem
-        echo OK pebble-issue
+      # Explicit in case a host/tool strips image ENV when invoking compose.
+      PATH: /usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    entrypoint: ["/bin/bash"]
+    command: ["/src/scripts/compose_pebble_issue.sh"]
     depends_on:
       - pebble
     profiles: ["acme"]

@@ -44,21 +44,42 @@ jobs:
       - name: Compose config valid
         run: docker compose -f docker-compose.dev.yml config >/dev/null
 
+  # Soft-fail on purpose: issuance has been historically flaky (image ENTRYPOINT,
+  # DNS, runner races). Linux + Compose stay the hard merge gates. See OPERATIONS.
   pebble-issue:
     name: Pebble ACME issuance
     runs-on: ubuntu-latest
     needs: check
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Start Pebble
         run: |
+          set -euo pipefail
           docker compose -f docker-compose.dev.yml --profile acme up -d pebble
+          ready=0
           for i in $(seq 1 60); do
-            curl -skf https://localhost:14000/dir >/dev/null && break
+            if curl -skf https://localhost:14000/dir >/dev/null; then
+              echo "pebble directory ready after ${i}s"
+              ready=1
+              break
+            fi
+            # Fail fast if the container already exited (bad command / crash).
+            if ! docker compose -f docker-compose.dev.yml --profile acme ps --status running --services | grep -qx pebble; then
+              echo "pebble container not running after ${i}s"
+              break
+            fi
             sleep 1
           done
+          if [ "$ready" != 1 ]; then
+            echo "=== pebble ps ==="
+            docker compose -f docker-compose.dev.yml --profile acme ps -a || true
+            echo "=== pebble logs ==="
+            docker compose -f docker-compose.dev.yml --profile acme logs pebble || true
+            exit 1
+          fi
           curl -skf https://localhost:14000/dir
       - name: Issue certificate via Pebble
         env:

@@ -12,8 +12,8 @@ See [ROADMAP_P09.md](ROADMAP_P09.md) and [ROADMAP_P10.md](ROADMAP_P10.md). Highl
 
 ## Deferred / Open backlog
 
-Durable list of follow-ups after **P10–P13**. Active promotion:
-[ROADMAP_P14.md](ROADMAP_P14.md).
+Durable list of follow-ups after **P10–P14**. Active promotion:
+[ROADMAP_P15.md](ROADMAP_P15.md) (P14 complete: [ROADMAP_P14.md](ROADMAP_P14.md)).
 
 ### Explicitly deferred / declined
 
@@ -39,6 +39,7 @@ Durable list of follow-ups after **P10–P13**. Active promotion:
 | Prometheus counter for `audit_dropped` | `sedat_audit_dropped_total` on admin/metrics | **done P11.4** |
 | PROXY-Rejects (pre-HTTP) as JSONL event | JSONL `proxy_reject` with reason/stage | **done P11.3** |
 | Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | **done P12.4** |
+| Stabilize Pebble ACME CI job | Compose ENTRYPOINT flags + CI wait/diagnostics | **done P15.1** |
 
 ### Admin / auth / selftest
 
