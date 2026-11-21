@@ -439,6 +439,9 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(mgr.config_snapshot().renew_days_before, 14);
-        assert!(mgr.status.lock().directory.contains("acme-staging") || !mgr.status.lock().directory.is_empty());
+        assert!(
+            mgr.status.lock().directory.contains("acme-staging")
+                || !mgr.status.lock().directory.is_empty()
+        );
     }
 }

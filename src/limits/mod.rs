@@ -628,7 +628,10 @@ mod tests {
             ..Default::default()
         });
         assert!(matches!(note, BanShareReloadNote::KeptFailClosed(_)));
-        assert!(lim.ban_share_enabled(), "invalid share keeps previous store");
+        assert!(
+            lim.ban_share_enabled(),
+            "invalid share keeps previous store"
+        );
         assert_eq!(note.reply_suffix(), " ban_share=kept_fail_closed");
 
         let note = lim.reconfigure(LimitsConfig::default());

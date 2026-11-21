@@ -425,7 +425,10 @@ fn reload_acme(state: &AdminState, cfg: &SedatConfig) -> String {
     match (&state.acme, cfg.acme.enabled) {
         (Some(mgr), _) => {
             mgr.replace_config(cfg.acme.clone());
-            info!(enabled = cfg.acme.enabled, "ACME live config swapped on reload");
+            info!(
+                enabled = cfg.acme.enabled,
+                "ACME live config swapped on reload"
+            );
             " acme=config_swapped".into()
         }
         (None, true) => {
