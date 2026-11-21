@@ -253,6 +253,12 @@ pub fn security_diff(old: &SedatConfig, new: &SedatConfig) -> Vec<SecurityChange
         &old.logging.audit_jsonl_max_bytes.to_string(),
         &new.logging.audit_jsonl_max_bytes.to_string(),
     );
+    push(
+        &mut out,
+        "logging.audit_jsonl_max_age_secs",
+        &old.logging.audit_jsonl_max_age_secs.to_string(),
+        &new.logging.audit_jsonl_max_age_secs.to_string(),
+    );
 
     // Route upstreams — compact summary of host→upstream pairs.
     let old_routes = route_summary(old);

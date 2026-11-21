@@ -289,7 +289,7 @@ async fn proxy_reject_writes_jsonl_audit() {
     cfg.logging.audit_jsonl = audit_str.into();
     cfg.logging.audit_jsonl_max_bytes = 0;
     cfg.proxy_protocol.inbound_enabled = false;
-    let audit = AuditSink::open(audit_str, 0).unwrap();
+    let audit = AuditSink::open(audit_str, 0, 0).unwrap();
     let state = ProxyState::with_audit(cfg, audit);
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

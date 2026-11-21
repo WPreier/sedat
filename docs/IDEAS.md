@@ -38,7 +38,7 @@ Durable list of follow-ups after **P10/P11**. Active promotion:
 |------|-------|-----------|
 | Prometheus counter for `audit_dropped` | `sedat_audit_dropped_total` on admin/metrics | **done P11.4** |
 | PROXY-Rejects (pre-HTTP) as JSONL event | JSONL `proxy_reject` with reason/stage | **done P11.3** |
-| Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | P12.4 |
+| Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | **done P12.4** |
 
 ### Admin / auth / selftest
 

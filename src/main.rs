@@ -180,6 +180,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
     let audit = match AuditSink::from_logging(
         &cfg.logging.audit_jsonl,
         cfg.logging.audit_jsonl_max_bytes,
+        cfg.logging.audit_jsonl_max_age_secs,
     ) {
         Ok(s) => s,
         Err(e) => {

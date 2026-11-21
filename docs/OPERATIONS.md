@@ -198,7 +198,8 @@ Disabled by default. Enable with a path under the state directory:
 ```toml
 [logging]
 audit_jsonl = "./state/audit.jsonl"
-audit_jsonl_max_bytes = 10485760
+audit_jsonl_max_bytes = 10485760   # size; 0 = off
+audit_jsonl_max_age_secs = 86400   # optional daily age rotate; 0 = off (default)
 ```
 
 Events (one JSON object per line): `startup`, `config_reload` (security-diff), `proxy_deny`
@@ -207,7 +208,8 @@ Events (one JSON object per line): `startup`, `config_reload` (security-diff), `
 (non-blocking; count as `sedat_audit_dropped_total`). See
 [phases/P10_02_jsonl_audit.md](phases/P10_02_jsonl_audit.md),
 [phases/P11_03_proxy_reject_jsonl.md](phases/P11_03_proxy_reject_jsonl.md),
-[phases/P11_04_audit_dropped_metrics.md](phases/P11_04_audit_dropped_metrics.md).
+[phases/P11_04_audit_dropped_metrics.md](phases/P11_04_audit_dropped_metrics.md),
+[phases/P12_04_audit_age_rotate.md](phases/P12_04_audit_age_rotate.md).
 
 ## Upstream IP pin
 

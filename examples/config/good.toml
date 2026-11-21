@@ -66,3 +66,4 @@ request_id = true
 request_id_header = "x-request-id"
 audit_jsonl = ""
 audit_jsonl_max_bytes = 10485760
+audit_jsonl_max_age_secs = 0

@@ -13,7 +13,8 @@ when request-id generation is enabled (P10.1).
 [logging]
 # empty = off (default)
 audit_jsonl = "./state/audit.jsonl"
-audit_jsonl_max_bytes = 10485760   # rotate to *.jsonl.1; 0 = never
+audit_jsonl_max_bytes = 10485760   # size rotate to *.jsonl.1; 0 = never
+audit_jsonl_max_age_secs = 0       # age rotate (P12.4); 0 = off
 ```
 
 ## Event shapes (`v: 1`)

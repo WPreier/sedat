@@ -90,7 +90,8 @@ level = "info"
 request_id = true                 # generate/propagate correlation id (default)
 request_id_header = "x-request-id"  # HTTP header after PROXY framing
 audit_jsonl = ""                  # empty = disabled; e.g. "./state/audit.jsonl"
-audit_jsonl_max_bytes = 10485760  # rotate to *.jsonl.1; 0 = never
+audit_jsonl_max_bytes = 10485760  # size rotate to *.jsonl.1; 0 = never
+audit_jsonl_max_age_secs = 0      # age rotate; 0 = off (e.g. 86400 = daily)
 ```
 
 ## Deploy resource caps (not TOML)
@@ -117,6 +118,7 @@ Additional P09 / P10 rules:
 - Inbound PROXY still requires a non-empty allowlist when enabled.
 - `logging.request_id_header` must be a valid HTTP token (alphanumeric / `-`).
 - `logging.audit_jsonl` must be empty or a local file path (no URL schemes).
+- `audit_jsonl_max_age_secs` (default `0`) enables age-based rotate beside size.
 - `ban_duration_secs` must be `> 0` when `ban_after_rate_limit_strikes > 0`.
 - `ban_extend_while_banned` (default `true`) refreshes ban TTL on each hit while
   banned; `ban_extend_min_interval_secs` (default `1`) throttles `ip_ban_extend`

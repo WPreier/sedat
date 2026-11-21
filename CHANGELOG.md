@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20] – 2026-11-21
+
+### Added
+
+- **P12.4 Time-based audit rotation:** `logging.audit_jsonl_max_age_secs`
+  (default `0` = off) rotates `audit_jsonl` to `*.jsonl.1` beside the existing
+  size trigger. Phase note
+  [docs/phases/P12_04_audit_age_rotate.md](docs/phases/P12_04_audit_age_rotate.md).
+
 ## [0.1.19] – 2026-11-21
 
 ### Added

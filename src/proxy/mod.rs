@@ -60,6 +60,7 @@ impl ProxyState {
         let audit = match AuditSink::from_logging(
             &config.logging.audit_jsonl,
             config.logging.audit_jsonl_max_bytes,
+            config.logging.audit_jsonl_max_age_secs,
         ) {
             Ok(s) => s,
             Err(e) => {

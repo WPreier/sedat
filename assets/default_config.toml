@@ -72,3 +72,4 @@ request_id_header = "x-request-id"
 # audit_jsonl = "./state/audit.jsonl"   # empty / unset = disabled
 audit_jsonl = ""
 audit_jsonl_max_bytes = 10485760
+audit_jsonl_max_age_secs = 0            # age rotate; 0 = off (e.g. 86400 daily)

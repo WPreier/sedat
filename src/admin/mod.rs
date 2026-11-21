@@ -307,6 +307,7 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
                 if let Err(e) = state.audit.reconfigure(
                     &active.config.logging.audit_jsonl,
                     active.config.logging.audit_jsonl_max_bytes,
+                    active.config.logging.audit_jsonl_max_age_secs,
                 ) {
                     warn!(error = %e, "audit jsonl reconfigure failed");
                 }
@@ -551,7 +552,7 @@ mod tests {
     fn metrics_expose_audit_dropped_counter() {
         let dir = tempfile::tempdir().unwrap();
         let audit_path = dir.path().join("a.jsonl");
-        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0, 0).unwrap();
         let cfg = SedatConfig {
             schema_version: 1,
             server: Default::default(),
@@ -619,7 +620,7 @@ mod tests {
         cfg.server.admin_token = "good-token".into();
         let dir = tempfile::tempdir().unwrap();
         let audit_path = dir.path().join("a.jsonl");
-        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0, 0).unwrap();
         let state = sample_state_with(cfg, audit);
         let mut authed = false;
 
@@ -670,7 +671,7 @@ mod tests {
         cfg.server.state_dir = dir.path().to_string_lossy().into();
         cfg.server.admin_socket = dir.path().join("a.sock").to_string_lossy().into();
         let audit_path = dir.path().join("audit.jsonl");
-        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0, 0).unwrap();
         let state = sample_state_with(cfg, audit);
         let mut authed = false;
         let (r, _) = dispatch_admin_line(&state, &mut authed, "selftest");
@@ -688,7 +689,7 @@ mod tests {
 
         let dir = tempfile::tempdir().unwrap();
         let audit_path = dir.path().join("audit.jsonl");
-        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0, 0).unwrap();
 
         let limits = LimitsConfig {
             rate_limit_per_ip: 1,
@@ -769,7 +770,7 @@ mod tests {
         let token_path = dir.path().join("admin.token");
         std::fs::write(&token_path, b"old-secret\n").unwrap();
         let audit_path = dir.path().join("a.jsonl");
-        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0, 0).unwrap();
 
         let mut cfg = SedatConfig {
             schema_version: 1,
@@ -872,7 +873,7 @@ mod tests {
         std::env::remove_var(ADMIN_TOKEN_ENV);
         let dir = tempfile::tempdir().unwrap();
         let audit_path = dir.path().join("a.jsonl");
-        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0).unwrap();
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0, 0).unwrap();
         let mut cfg = SedatConfig {
             schema_version: 1,
             server: Default::default(),
