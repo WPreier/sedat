@@ -30,7 +30,8 @@ host = "localhost"
 [[routes.hosts.paths]]
 prefix = "/"
 upstream = "http://127.0.0.1:9080"
-# upstream_allowlist = ["127.0.0.1"]  # optional pin; empty = unrestricted
+# upstream_allowlist = ["127.0.0.1", "db.internal"]  # IP/CIDR/hostname; empty = unrestricted
+# upstream_dns_refresh_secs = 60
 
 [proxy_protocol]
 outbound = "v2"

@@ -56,8 +56,9 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Pin by hostname literal + periodic DNS refresh |
+| **Status** | **done** (v0.1.21) |
+| **Behavior** | Hostname literals in pin + cached DNS refresh (`upstream_dns_refresh_secs`); fail-closed if expanded pin empty / peer leaves set |
+| **Phase note** | [phases/P12_05_upstream_pin_reresolve.md](phases/P12_05_upstream_pin_reresolve.md) |
 
 ### P12.6 – Shared ban state across replicas
 
@@ -74,5 +75,5 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 | 2 | Sliding / extending bans | **done** (v0.1.18) |
 | 3 | Token rotation w/o reload | **done** (v0.1.19) |
 | 4 | Time-based audit rotate | **done** (v0.1.20) |
-| 5 | Upstream pin re-resolve | pending |
+| 5 | Upstream pin re-resolve | **done** (v0.1.21) |
 | 6 | Shared ban state | pending |

@@ -11,7 +11,7 @@ use rustls::ClientConfig;
 use serde_json::json;
 
 use crate::admin::AdminState;
-use crate::config::{parse_cidr, CURRENT_SCHEMA_VERSION};
+use crate::config::{is_allowlist_entry, parse_cidr, CURRENT_SCHEMA_VERSION};
 use crate::proxy::encode_proxy_v2;
 use crate::tls::ensure_crypto_provider;
 
@@ -338,7 +338,7 @@ fn check_allowlists(cfg: &crate::config::SedatConfig) -> SelftestCheck {
         for path in &host.paths {
             for e in &path.upstream_allowlist {
                 n_up += 1;
-                if parse_cidr(e).is_err() {
+                if !is_allowlist_entry(e) {
                     bad.push(format!(
                         "upstream_allowlist host={} prefix={} unparseable `{e}`",
                         host.host, path.prefix

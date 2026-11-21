@@ -275,7 +275,11 @@ fn route_summary(cfg: &SedatConfig) -> String {
             let pin = if p.upstream_allowlist.is_empty() {
                 String::new()
             } else {
-                format!("[{}]", p.upstream_allowlist.join(","))
+                format!(
+                    "[{}]@{}s",
+                    p.upstream_allowlist.join(","),
+                    p.upstream_dns_refresh_secs
+                )
             };
             parts.push(format!("{}{}→{}{}", h.host, p.prefix, p.upstream, pin));
         }

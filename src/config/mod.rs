@@ -8,7 +8,9 @@ mod validate;
 pub use diff::{format_audit_summary, security_diff, SecurityChange};
 pub use migrate::{migrate_toml, migration_path, peek_schema_version, upgrade_notes};
 pub use schema::*;
-pub use validate::{ip_in_allowlist, parse_cidr, validate_config, ValidationError};
+pub use validate::{
+    ip_in_allowlist, ip_in_cidr, is_allowlist_entry, parse_cidr, validate_config, ValidationError,
+};
 
 use std::fs;
 use std::io;

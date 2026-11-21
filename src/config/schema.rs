@@ -236,12 +236,17 @@ pub struct PathRoute {
     /// Default / recommended for Seda: plaintext `http://` on a private net.
     /// `https://` enables TLS to the upstream; pair with mTLS paths below when needed.
     pub upstream: String,
-    /// Optional IP/CIDR allowlist for the resolved upstream peer (empty = no pin).
+    /// Optional IP/CIDR/**hostname** allowlist for the resolved upstream peer
+    /// (empty = no pin).
     ///
     /// When non-empty, DNS results / connected peer must match (fail-closed).
-    /// Mitigates DNS rebinding and unexpected upstream IPs after config reload.
+    /// Hostname literals are re-resolved on the interval below (P12.5).
     #[serde(default)]
     pub upstream_allowlist: Vec<String>,
+    /// How often to re-resolve upstream DNS and hostname pins (seconds).
+    /// Default **60**. `0` = re-query on every connect (no cache hit).
+    #[serde(default = "default_upstream_dns_refresh")]
+    pub upstream_dns_refresh_secs: u64,
     /// Optional client certificate PEM for upstream mTLS (empty = off).
     /// Requires `upstream_mtls_key` and an `https://` upstream.
     #[serde(default)]
@@ -255,12 +260,17 @@ pub struct PathRoute {
     pub upstream_mtls_ca: String,
 }
 
+fn default_upstream_dns_refresh() -> u64 {
+    60
+}
+
 impl Default for PathRoute {
     fn default() -> Self {
         Self {
             prefix: "/".into(),
             upstream: "http://127.0.0.1:1".into(),
             upstream_allowlist: vec![],
+            upstream_dns_refresh_secs: default_upstream_dns_refresh(),
             upstream_mtls_cert: String::new(),
             upstream_mtls_key: String::new(),
             upstream_mtls_ca: String::new(),

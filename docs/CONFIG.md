@@ -48,7 +48,8 @@ host = "localhost"
 prefix = "/"
 upstream = "http://127.0.0.1:9080"   # recommended default (plaintext)
 # upstream = "https://backend.internal:9443"  # optional TLS to upstream
-# upstream_allowlist = ["127.0.0.1", "10.0.0.0/8"]  # empty = no pin
+# upstream_allowlist = ["127.0.0.1", "10.0.0.0/8", "db.internal"]  # IP/CIDR/hostname
+# upstream_dns_refresh_secs = 60  # DNS cache TTL; 0 = every connect
 # upstream_mtls_cert = "./certs/client.crt"   # optional mTLS (both cert+key)
 # upstream_mtls_key  = "./certs/client.key"
 # upstream_mtls_ca   = "./certs/upstream-ca.crt"  # empty = webpki roots
@@ -128,7 +129,9 @@ Additional P09 / P10 rules:
 - Live token gate (P12.3): admin `reload-token` refreshes without full process
   restart; `admin_token_overlap_secs` (default 300) keeps the previous token
   valid during rotation; empty sources while auth is on are **fail-closed**.
-- `upstream_allowlist` entries must be valid IPs/CIDRs when set.
+- `upstream_allowlist` entries must be valid IPs/CIDRs **or hostnames** when set.
+- `upstream_dns_refresh_secs` (default `60`) caches upstream + hostname-pin DNS;
+  `0` re-queries every connect.
 - `upstream` may be `http://` or `https://`. `upstream_mtls_*` requires `https://`;
   cert+key must both be set or both empty; PEM paths must exist when set.
 - When `acme.enabled`, `acme.renew_days_before` must be `1..=90`.

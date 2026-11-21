@@ -13,6 +13,7 @@ re-checks the connected peer. Empty allowlist = no pin (backward compatible).
 prefix = "/"
 upstream = "http://backend.internal:9080"
 upstream_allowlist = ["10.0.0.5", "10.0.0.0/8"]  # empty = unrestricted
+# hostname literals + DNS refresh: see P12.5
 ```
 
 | Behavior | Result |

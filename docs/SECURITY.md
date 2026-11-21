@@ -20,7 +20,7 @@ Full write-up: **[THREAT_MODEL.md](THREAT_MODEL.md)** (assets, trust boundaries,
 | Slowloris / header bomb | Request timeout on connections; header count/size caps |
 | HTTP/2 CONTINUATION / HPACK bomb | hyper limits + size caps; negative corpus `tests/h2_attack_corpus.rs` |
 | Edge DoS | Token-bucket per verified client IP; connection limits; temporary IP ban after strike series |
-| Upstream DNS rebinding / SSRF-ish redirect | Optional per-route `upstream_allowlist` pin (fail-closed) |
+| Upstream DNS rebinding / SSRF-ish redirect | Optional per-route `upstream_allowlist` pin (IP/CIDR/hostname; cached re-resolve; fail-closed) |
 | Spoofed / unauthenticated upstream peer | Optional HTTPS + mTLS client cert (`upstream_mtls_*`, default off) |
 | Privilege / RCE blast radius | Drop after bind; **Landlock + seccomp-BPF** (`[hardening]`, Linux `auto`) |
 | Log blocking | Async bounded channel; drop+metric on overflow |
