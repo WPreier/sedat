@@ -32,7 +32,6 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper::body::Incoming;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
@@ -204,7 +203,7 @@ pub fn html_response(status: StatusCode, body: &str) -> Response<BoxBody> {
 }
 
 /// Reject obvious HTTP request-smuggling shapes (CL + TE together).
-fn has_smuggling_headers(req: &Request<Incoming>) -> bool {
+fn has_smuggling_headers<B>(req: &Request<B>) -> bool {
     let has_te = req
         .headers()
         .keys()
@@ -259,13 +258,18 @@ async fn read_http_header_block(
     Ok(buf)
 }
 
-/// Handle a single HTTP request.
-pub async fn handle_request(
-    req: Request<Incoming>,
+/// Handle a single HTTP request (HTTP/1.1, H2, or H3-collected body).
+pub async fn handle_request<B>(
+    req: Request<B>,
     peer: SocketAddr,
     state: ProxyState,
     tls_sni: Option<String>,
-) -> Result<Response<BoxBody>, Infallible> {
+) -> Result<Response<BoxBody>, Infallible>
+where
+    B: hyper::body::Body + Send + 'static,
+    B::Data: Send,
+    B::Error: std::error::Error + Send + Sync + 'static,
+{
     let cfg = state.config.load_full();
     let rid = resolve_request_id(
         req.headers(),

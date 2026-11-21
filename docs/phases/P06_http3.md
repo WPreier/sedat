@@ -29,4 +29,5 @@
 
 ## 6. Risiken
 
-Full h3 request bridging still experimental (accept/limit path shipped).
+Request bridging shipped in **P14.2** (buffered bodies; still experimental /
+feature-gated). See [P14_02_h3_request_proxy.md](P14_02_h3_request_proxy.md).

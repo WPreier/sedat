@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use hyper::body::Incoming;
+use hyper::body::Body;
 use hyper::{Request, Response, Uri};
 use rustls::pki_types::ServerName;
 use thiserror::Error;
@@ -50,15 +50,20 @@ pub enum ProxyError {
 pub type RequestIdFwd<'a> = Option<(&'a str, &'a str)>;
 
 /// Forward `req` to the matched upstream.
-pub async fn proxy_request(
-    req: Request<Incoming>,
+pub async fn proxy_request<B>(
+    req: Request<B>,
     client_addr: SocketAddr,
     route: &RouteMatch,
     pp: &ProxyProtocolConfig,
     max_body: usize,
     request_id: RequestIdFwd<'_>,
     dns_cache: &DnsCache,
-) -> Result<Response<Full<Bytes>>, ProxyError> {
+) -> Result<Response<Full<Bytes>>, ProxyError>
+where
+    B: Body + Send,
+    B::Data: Send,
+    B::Error: std::error::Error + Send + Sync + 'static,
+{
     let upstream_base: Uri = route
         .upstream
         .parse()
