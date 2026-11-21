@@ -22,14 +22,12 @@ fn sedat_service_has_cgroup_and_sandbox_limits() {
         "Type=notify",
         "WatchdogSec=",
     ] {
-        assert!(
-            text.contains(key),
-            "deploy/sedat.service missing `{key}`"
-        );
+        assert!(text.contains(key), "deploy/sedat.service missing `{key}`");
     }
     // Sensible hard ceiling present (value may be tuned later).
     assert!(
-        text.lines().any(|l| l.starts_with("MemoryMax=") && l.contains('M')),
+        text.lines()
+            .any(|l| l.starts_with("MemoryMax=") && l.contains('M')),
         "MemoryMax should set a megabyte-scale ceiling"
     );
 }

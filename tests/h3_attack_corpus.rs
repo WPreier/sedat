@@ -158,8 +158,11 @@ mod corpus {
         let run = async {
             let mut ok_or_reject = 0usize;
             for _ in 0..MAX_FLOOD_CONNECTIONS {
-                match timeout(Duration::from_secs(2), endpoint.connect(addr, "localhost").unwrap())
-                    .await
+                match timeout(
+                    Duration::from_secs(2),
+                    endpoint.connect(addr, "localhost").unwrap(),
+                )
+                .await
                 {
                     Ok(Ok(conn)) => {
                         ok_or_reject += 1;

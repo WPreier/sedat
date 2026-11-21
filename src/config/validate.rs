@@ -194,9 +194,7 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
             if !is_loopback_listen(addr) {
                 return Err(err(
                     find_line(source, addr),
-                    format!(
-                        "metrics_listen must be loopback only (127.0.0.1 / ::1), got `{addr}`"
-                    ),
+                    format!("metrics_listen must be loopback only (127.0.0.1 / ::1), got `{addr}`"),
                 ));
             }
         }

@@ -177,8 +177,7 @@ impl LiveAdminTokens {
             (Some(old), Some(n)) => {
                 if overlap_secs > 0 {
                     snap.previous = Some(old.clone());
-                    snap.previous_until =
-                        Some(Instant::now() + Duration::from_secs(overlap_secs));
+                    snap.previous_until = Some(Instant::now() + Duration::from_secs(overlap_secs));
                 } else {
                     snap.previous = None;
                     snap.previous_until = None;
@@ -226,7 +225,10 @@ pub fn parse_bearer_authorization(header_value: &str) -> Option<&str> {
 /// - `expected = None` → auth disabled (loopback-only still applies at the listener).
 /// - `expected = Some(t)` → require `Authorization: Bearer <t>` (constant-time).
 #[must_use]
-pub fn metrics_token_authorized(expected: Option<&str>, authorization_header: Option<&str>) -> bool {
+pub fn metrics_token_authorized(
+    expected: Option<&str>,
+    authorization_header: Option<&str>,
+) -> bool {
     let Some(exp) = expected else {
         return true;
     };
@@ -317,7 +319,10 @@ mod tests {
         assert!(metrics_token_authorized(None, None));
         assert!(metrics_token_authorized(None, Some("Bearer x")));
         assert!(!metrics_token_authorized(Some("secret"), None));
-        assert!(!metrics_token_authorized(Some("secret"), Some("Bearer wrong")));
+        assert!(!metrics_token_authorized(
+            Some("secret"),
+            Some("Bearer wrong")
+        ));
         assert!(metrics_token_authorized(
             Some("secret"),
             Some("Bearer secret")

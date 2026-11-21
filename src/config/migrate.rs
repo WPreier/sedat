@@ -29,13 +29,16 @@ pub fn peek_schema_version(text: &str) -> Result<u32, ConfigError> {
         schema_version: u32,
     }
     let v: OnlyVersion = toml::from_str(text).map_err(|e| {
-        let line = e.span().map(|s| {
-            text[..s.start.min(text.len())]
-                .bytes()
-                .filter(|b| *b == b'\n')
-                .count()
-                + 1
-        }).unwrap_or(1);
+        let line = e
+            .span()
+            .map(|s| {
+                text[..s.start.min(text.len())]
+                    .bytes()
+                    .filter(|b| *b == b'\n')
+                    .count()
+                    + 1
+            })
+            .unwrap_or(1);
         ConfigError::Parse {
             line,
             message: e.message().to_string(),

@@ -49,11 +49,7 @@ impl DnsCache {
     /// Look up A/AAAA for `host`, using cache while younger than `refresh`.
     ///
     /// `refresh == Duration::ZERO` → always re-query DNS (no cache hit).
-    pub async fn lookup_ips(
-        &self,
-        host: &str,
-        refresh: Duration,
-    ) -> std::io::Result<Vec<IpAddr>> {
+    pub async fn lookup_ips(&self, host: &str, refresh: Duration) -> std::io::Result<Vec<IpAddr>> {
         let key = host.trim().to_ascii_lowercase();
         if key.is_empty() {
             return Ok(Vec::new());
@@ -116,9 +112,7 @@ impl DnsCache {
     pub fn age_for_test(&self, host: &str, age: Duration) {
         let key = host.trim().to_ascii_lowercase();
         if let Some(mut e) = self.inner.get_mut(&key) {
-            e.fetched_at = Instant::now()
-                .checked_sub(age)
-                .unwrap_or_else(Instant::now);
+            e.fetched_at = Instant::now().checked_sub(age).unwrap_or_else(Instant::now);
         }
     }
 }
@@ -136,7 +130,9 @@ pub fn ip_allowed_by_pin(ip: IpAddr, pin: &ExpandedPin) -> bool {
     match pin {
         ExpandedPin::Unrestricted => true,
         ExpandedPin::Restricted { cidrs, host_ips } => {
-            cidrs.iter().any(|(net, prefix)| ip_in_cidr(ip, *net, *prefix))
+            cidrs
+                .iter()
+                .any(|(net, prefix)| ip_in_cidr(ip, *net, *prefix))
                 || host_ips.iter().any(|h| *h == ip)
         }
     }
@@ -159,10 +155,7 @@ pub fn upstream_ip_allowed(ip: IpAddr, allowlist: &[String]) -> bool {
 
 /// Filter resolved addresses by an expanded pin.
 #[must_use]
-pub fn filter_pinned_addrs_expanded(
-    addrs: &[SocketAddr],
-    pin: &ExpandedPin,
-) -> Vec<SocketAddr> {
+pub fn filter_pinned_addrs_expanded(addrs: &[SocketAddr], pin: &ExpandedPin) -> Vec<SocketAddr> {
     match pin {
         ExpandedPin::Unrestricted => addrs.to_vec(),
         ExpandedPin::Restricted { .. } => addrs

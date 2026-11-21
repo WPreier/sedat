@@ -131,7 +131,8 @@ async fn smuggling_cl_te_rejected() {
     );
     assert!(!resp.contains("200 OK"));
     assert!(
-        resp.to_ascii_lowercase().contains("x-request-id: smug-early-1"),
+        resp.to_ascii_lowercase()
+            .contains("x-request-id: smug-early-1"),
         "early smuggling reject must echo request_id, got {resp}"
     );
 }
@@ -301,7 +302,10 @@ async fn proxy_reject_writes_jsonl_audit() {
     let mut client = TcpStream::connect(addr).await.unwrap();
     let spoof: std::net::SocketAddr = "203.0.113.9:4444".parse().unwrap();
     let local: std::net::SocketAddr = "10.0.0.1:443".parse().unwrap();
-    client.write_all(&encode_proxy_v1(spoof, local)).await.unwrap();
+    client
+        .write_all(&encode_proxy_v1(spoof, local))
+        .await
+        .unwrap();
     client
         .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
         .await
@@ -324,7 +328,10 @@ async fn proxy_reject_writes_jsonl_audit() {
         text.contains("\"stage\":\"plaintext\""),
         "missing stage: {text}"
     );
-    assert!(text.contains("\"request_id\":null"), "expected null request_id: {text}");
+    assert!(
+        text.contains("\"request_id\":null"),
+        "expected null request_id: {text}"
+    );
 }
 
 #[tokio::test]

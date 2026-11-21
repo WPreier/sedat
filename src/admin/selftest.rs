@@ -298,11 +298,7 @@ pub fn run_selftest(state: &AdminState) -> SelftestReport {
     checks.extend(probe_upstreams(&cfg));
 
     let uptime_secs = state.started_at.elapsed().as_secs();
-    checks.push(check(
-        "uptime",
-        true,
-        format!("secs={uptime_secs}"),
-    ));
+    checks.push(check("uptime", true, format!("secs={uptime_secs}")));
 
     SelftestReport {
         checks,
@@ -449,8 +445,8 @@ fn tls_alpn_probe(host: &str, stream: TcpStream) -> Result<String, String> {
         .with_no_client_auth();
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
     let server_name = ServerName::try_from(host.to_string()).map_err(|e| e.to_string())?;
-    let conn = rustls::ClientConnection::new(Arc::new(config), server_name)
-        .map_err(|e| e.to_string())?;
+    let conn =
+        rustls::ClientConnection::new(Arc::new(config), server_name).map_err(|e| e.to_string())?;
     let mut sock = stream;
     let mut conn = conn;
     let deadline = Instant::now() + PROBE_TIMEOUT;
@@ -554,11 +550,7 @@ fn probe_upstreams(cfg: &crate::config::SedatConfig) -> Vec<SelftestCheck> {
 
     vec![
         check("upstream_tcp", tcp_fail == 0, tcp_detail),
-        check(
-            "upstream_tls_alpn",
-            tls_fail == 0,
-            tls_detail,
-        ),
+        check("upstream_tls_alpn", tls_fail == 0, tls_detail),
     ]
 }
 

@@ -110,8 +110,7 @@ pub async fn proxy_request(
     let version = ProxyVersion::parse(&pp.outbound);
     let refresh = Duration::from_secs(route.upstream_dns_refresh_secs);
     let mut stream =
-        connect_pinned_upstream(host, port, &route.upstream_allowlist, dns_cache, refresh)
-            .await?;
+        connect_pinned_upstream(host, port, &route.upstream_allowlist, dns_cache, refresh).await?;
 
     // Plain HTTP upstream: optional PROXY framing, then HTTP.
     // HTTPS / mTLS: ClientHello must be first on the wire — skip outbound PROXY
@@ -290,7 +289,10 @@ async fn connect_pinned_upstream(
         }
     }
     Err(ProxyError::Io(last_err.unwrap_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::Other, "all pinned upstream connects failed")
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "all pinned upstream connects failed",
+        )
     })))
 }
 

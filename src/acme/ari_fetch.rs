@@ -43,8 +43,7 @@ async fn http_get_text(url: &str) -> Result<String, String> {
 
 async fn http_get(url: &str) -> Result<(StatusCode, Option<String>, String), String> {
     crate::tls::ensure_crypto_provider();
-    let pebbleish =
-        url.contains("14000") || url.contains("pebble") || url.contains("127.0.0.1");
+    let pebbleish = url.contains("14000") || url.contains("pebble") || url.contains("127.0.0.1");
     let tls = if pebbleish {
         rustls::ClientConfig::builder()
             .dangerous()

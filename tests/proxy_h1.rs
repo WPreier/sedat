@@ -212,7 +212,11 @@ async fn forwards_and_echoes_request_id() {
         .expect("response must echo x-request-id")
         .to_owned();
     assert_eq!(echoed.len(), 32);
-    let upstream = seen.lock().unwrap().clone().expect("upstream saw x-request-id");
+    let upstream = seen
+        .lock()
+        .unwrap()
+        .clone()
+        .expect("upstream saw x-request-id");
     assert_eq!(upstream, echoed);
 }
 

@@ -214,8 +214,8 @@ fn try_landlock(state_dir: &Path, extra_ro: &[&Path]) -> Result<String, String> 
     let ruleset = ruleset as i32;
 
     let add_path = |path: &Path, access: u64| -> Result<(), String> {
-        let c = std::ffi::CString::new(path.to_string_lossy().as_bytes())
-            .map_err(|e| e.to_string())?;
+        let c =
+            std::ffi::CString::new(path.to_string_lossy().as_bytes()).map_err(|e| e.to_string())?;
         let fd = unsafe { libc::open(c.as_ptr(), libc::O_PATH | libc::O_CLOEXEC) };
         if fd < 0 {
             return Err(format!(
@@ -254,7 +254,10 @@ fn try_landlock(state_dir: &Path, extra_ro: &[&Path]) -> Result<String, String> 
     let _ = add_path(Path::new("/lib"), ACCESS_FS_ROUGHLY_READ);
     let _ = add_path(Path::new("/lib64"), ACCESS_FS_ROUGHLY_READ);
     let _ = add_path(Path::new("/etc"), ACCESS_FS_ROUGHLY_READ);
-    let _ = add_path(Path::new("/dev/null"), ACCESS_FS_ROUGHLY_READ | LANDLOCK_ACCESS_FS_WRITE_FILE);
+    let _ = add_path(
+        Path::new("/dev/null"),
+        ACCESS_FS_ROUGHLY_READ | LANDLOCK_ACCESS_FS_WRITE_FILE,
+    );
     let _ = std::fs::create_dir_all(state_dir);
     add_path(state_dir, ACCESS_FS_ROUGHLY_READ | ACCESS_FS_ROUGHLY_WRITE)?;
     for p in extra_ro {

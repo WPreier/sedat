@@ -218,7 +218,8 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             if !listen.is_empty() {
                 if let Ok(addr) = listen.parse::<SocketAddr>() {
                     tokio::spawn(async move {
-                        if let Err(e) = admin::serve_metrics_sidecar(addr, admin_for_metrics).await {
+                        if let Err(e) = admin::serve_metrics_sidecar(addr, admin_for_metrics).await
+                        {
                             warn!(error = %e, "metrics sidecar terminated");
                         }
                     });

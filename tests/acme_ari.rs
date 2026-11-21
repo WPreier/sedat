@@ -9,9 +9,7 @@ use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
-use rcgen::{
-    BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair,
-};
+use rcgen::{BasicConstraints, CertificateParams, DistinguishedName, DnType, IsCa, KeyPair};
 use sedat::acme::{
     certificate_id_from_pem, directory_renewal_info_url, fetch_ari_for_cert,
     fetch_renewal_info_base, not_after_from_pem, parse_renewal_info_json, schedule_renewal,
@@ -93,8 +91,7 @@ fn mint_ee_with_aki() -> (Vec<u8>, String) {
 
     let mut ee = CertificateParams::new(vec!["localhost".into()]).unwrap();
     ee.distinguished_name = DistinguishedName::new();
-    ee.distinguished_name
-        .push(DnType::CommonName, "localhost");
+    ee.distinguished_name.push(DnType::CommonName, "localhost");
     ee.use_authority_key_identifier_extension = true;
     let ee_key = KeyPair::generate().unwrap();
     let ee_cert = ee.signed_by(&ee_key, &ca_cert, &ca_key).unwrap();
@@ -111,17 +108,24 @@ async fn fetch_ari_from_mock_directory() {
 
     let base = fetch_renewal_info_base(&dir_url).await.unwrap().unwrap();
     assert!(base.contains("/ri"), "{base}");
-    assert_eq!(directory_renewal_info_url(
-        &serde_json::json!({"renewalInfo": base.clone()}).to_string()
-    ).as_deref(), Some(base.as_str()));
+    assert_eq!(
+        directory_renewal_info_url(&serde_json::json!({"renewalInfo": base.clone()}).to_string())
+            .as_deref(),
+        Some(base.as_str())
+    );
 
     let (info, retry) = fetch_ari_for_cert(&base, &cert_id).await.unwrap();
     assert_eq!(retry, Duration::from_secs(3600));
     assert!(info.explanation_url.is_some());
 
     let now = SystemTime::now();
-    match schedule_renewal(now, Some(&info.window), not_after_from_pem(&pem).ok(), 30, 0.0)
-    {
+    match schedule_renewal(
+        now,
+        Some(&info.window),
+        not_after_from_pem(&pem).ok(),
+        30,
+        0.0,
+    ) {
         RenewSchedule::Later {
             reason: "ari_suggested_window",
             at,
