@@ -5,6 +5,17 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.24] – 2026-11-21
+
+### Added
+
+- **P13.2 Multiple DNS providers:** working Cloudflare DNS-01 (API v4, zone
+  lookup, TXT present/cleanup) and generic HTTP **webhook** provider; injectable
+  `DnsHttpTransport` for mocks. Secrets via `SEDAT_CLOUDFLARE_API_TOKEN` /
+  `SEDAT_DNS_WEBHOOK_BEARER`. Default remains `dns_provider = "file"` + ACME
+  `directory = "staging"`. Phase note
+  [docs/phases/P13_02_dns_providers.md](docs/phases/P13_02_dns_providers.md).
+
 ## [0.1.23] – 2026-11-21
 
 ### Added

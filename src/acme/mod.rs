@@ -14,7 +14,11 @@ pub use ari::{
 pub use ari_fetch::{fetch_ari_for_cert, fetch_renewal_info_base};
 pub use http_client::acme_http_client;
 
-pub use dns::{DnsProvider, FileDnsProvider};
+pub use dns::{
+    challenge_fqdn, resolve_secret, CloudflareDnsProvider, DnsHttpTransport, DnsProvider,
+    FileDnsProvider, HyperDnsTransport, WebhookDnsProvider, CLOUDFLARE_TOKEN_ENV,
+    WEBHOOK_BEARER_ENV,
+};
 pub use renew::{AcmeManager, AcmeStatus};
 
 use std::fs;
@@ -74,12 +78,64 @@ impl AcmePaths {
 }
 
 /// Build a DNS provider from config.
+///
+/// Default / unknown → `file` (staging-safe). API providers fail closed at call
+/// time if secrets/URLs are missing; construction errors map to a file provider
+/// only when the feature cannot even build an HTTP client (logged).
 pub fn dns_from_config(cfg: &AcmeConfig) -> Box<dyn DnsProvider> {
     match cfg.dns_provider.as_str() {
-        "cloudflare" => Box::new(dns::CloudflareDnsProvider::new(
-            cfg.cloudflare_api_token.clone().unwrap_or_default(),
-        )),
+        "cloudflare" => {
+            let token = resolve_secret(CLOUDFLARE_TOKEN_ENV, cfg.cloudflare_api_token.as_deref());
+            let zone = cfg
+                .cloudflare_zone_id
+                .as_ref()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+            match CloudflareDnsProvider::new(token, zone) {
+                Ok(p) => Box::new(p),
+                Err(e) => {
+                    tracing::error!(error = %e, "cloudflare DNS provider init failed; refusing silent fallback");
+                    // Fail closed: empty-token cloudflare still constructed without HTTP? new() only fails on TLS client.
+                    // Return a cloudflare provider that will error on present (token may be set).
+                    Box::new(CloudflareDnsProvider::with_transport(
+                        resolve_secret(CLOUDFLARE_TOKEN_ENV, cfg.cloudflare_api_token.as_deref()),
+                        cfg.cloudflare_zone_id
+                            .clone()
+                            .filter(|s| !s.trim().is_empty()),
+                        "https://api.cloudflare.com/client/v4",
+                        std::sync::Arc::new(FailingTransport(e)),
+                    ))
+                }
+            }
+        }
+        "webhook" => {
+            let bearer = resolve_secret(WEBHOOK_BEARER_ENV, cfg.dns_webhook_bearer.as_deref());
+            match WebhookDnsProvider::new(cfg.dns_webhook_url.clone(), bearer) {
+                Ok(p) => Box::new(p),
+                Err(e) => Box::new(WebhookDnsProvider::with_transport(
+                    cfg.dns_webhook_url.clone(),
+                    resolve_secret(WEBHOOK_BEARER_ENV, cfg.dns_webhook_bearer.as_deref()),
+                    std::sync::Arc::new(FailingTransport(e)),
+                )),
+            }
+        }
         _ => Box::new(FileDnsProvider::new(PathBuf::from(&cfg.dns_file))),
+    }
+}
+
+/// Transport that always errors (used when Hyper client cannot be built).
+struct FailingTransport(String);
+
+impl DnsHttpTransport for FailingTransport {
+    fn send<'a>(
+        &'a self,
+        _method: http::Method,
+        _url: &'a str,
+        _headers: Vec<(String, String)>,
+        _body: Option<String>,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = dns::DnsHttpResult> + Send + 'a>> {
+        let msg = self.0.clone();
+        Box::pin(async move { Err(format!("dns http client unavailable: {msg}")) })
     }
 }
 

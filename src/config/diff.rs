@@ -159,6 +159,18 @@ pub fn security_diff(old: &SedatConfig, new: &SedatConfig) -> Vec<SecurityChange
         &old.acme.dns_provider,
         &new.acme.dns_provider,
     );
+    push(
+        &mut out,
+        "acme.dns_webhook_url",
+        &old.acme.dns_webhook_url,
+        &new.acme.dns_webhook_url,
+    );
+    push(
+        &mut out,
+        "acme.cloudflare_zone_id",
+        &old.acme.cloudflare_zone_id.clone().unwrap_or_default(),
+        &new.acme.cloudflare_zone_id.clone().unwrap_or_default(),
+    );
 
     push(
         &mut out,

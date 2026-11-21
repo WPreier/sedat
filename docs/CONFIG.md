@@ -37,8 +37,12 @@ enabled = false
 directory = "staging"   # or "production" | "pebble" | URL
 email = "admin@example.com"
 domains = ["example.com"]
-dns_provider = "file"   # file | cloudflare
+dns_provider = "file"   # file | cloudflare | webhook
 dns_file = "./state/acme-dns-challenge.txt"
+# cloudflare_api_token = ""          # or SEDAT_CLOUDFLARE_API_TOKEN
+# cloudflare_zone_id = ""            # optional; else zone name lookup
+# dns_webhook_url = "https://hooks.example/dns"  # required for webhook
+# dns_webhook_bearer = ""            # or SEDAT_DNS_WEBHOOK_BEARER
 ari = true                 # prefer RFC 9773 renewalInfo when CA supports it
 renew_days_before = 30     # fallback lead time if ARI unavailable (1..=90)
 
