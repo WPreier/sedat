@@ -43,7 +43,11 @@ Aliases: `self-test`, `self_test`.
 | `tls_cert_path` / `tls_key_path` | Files exist when TLS on + static paths set |
 | `acme_status` | ACME handle / disabled |
 | `audit_jsonl` | Enabled path or disabled |
+| `allowlists` | PROXY/upstream CIDR entries parse (P11.6) |
+| `upstream_tcp` / `upstream_tls_alpn` | Short-timeout connectivity (P11.6) |
 | `uptime` | Seconds since admin state creation |
+
+Optional: `selftest json` → JSON document after the OK/ERR header (P11.6).
 
 ## Tests
 
