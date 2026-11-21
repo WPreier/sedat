@@ -6,9 +6,9 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tracing::{info, warn};
 #[cfg(feature = "http3")]
 use tracing::debug;
+use tracing::{info, warn};
 
 use crate::config::SedatConfig;
 use crate::limits::Limiter;
