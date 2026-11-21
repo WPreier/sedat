@@ -13,6 +13,7 @@ P14.1 Broaden hot-reload         ← done (v0.1.25)
 P14.2 H3 full request proxy      ← done (v0.1.26; h3-quinn 0.0.10)
 P14.3 H3 streamed bodies         ← done (v0.1.27)
 P14.4 TCP upstream body stream   ← done (v0.1.28)
+P14.5 Upstream chunked decode    ← done (v0.1.29)
 … later: remaining ops/hardening from IDEAS …
 ```
 
@@ -50,6 +51,14 @@ P14.4 TCP upstream body stream   ← done (v0.1.28)
 | **Behavior** | Chunked request write + channel-streamed upstream response; oversize → 413 |
 | **Phase note** | [phases/P14_04_tcp_upstream_stream.md](phases/P14_04_tcp_upstream_stream.md) |
 
+### P14.5 – Upstream chunked decode
+
+| | |
+|--|--|
+| **Status** | **done** (v0.1.29) |
+| **Behavior** | Decode upstream `Transfer-Encoding: chunked` into streamed payload; TE > CL |
+| **Phase note** | [phases/P14_05_upstream_chunked_decode.md](phases/P14_05_upstream_chunked_decode.md) |
+
 ## Status board
 
 | Step | Item | Status |
@@ -58,3 +67,4 @@ P14.4 TCP upstream body stream   ← done (v0.1.28)
 | 2 | H3 full request proxy | **done** (v0.1.26) |
 | 3 | H3 streamed bodies | **done** (v0.1.27) |
 | 4 | TCP upstream body streaming | **done** (v0.1.28) |
+| 5 | Upstream chunked decode | **done** (v0.1.29) |

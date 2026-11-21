@@ -1,7 +1,8 @@
 //! Upstream forwarding with optional PROXY header, IP pin, and HTTPS/mTLS.
 //!
 //! Request bodies are written with HTTP/1.1 chunked transfer (no full-buffer).
-//! Response bodies are streamed via a channel under `max_body_bytes` (fail-closed).
+//! Response bodies are streamed via a channel under `max_body_bytes` (fail-closed),
+//! including decoded upstream `Transfer-Encoding: chunked` payloads.
 
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -303,9 +304,17 @@ async fn read_response_head<S: AsyncRead + Unpin>(
     }
 }
 
+/// How to read the upstream response body after headers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UpstreamBodyMode {
+    ContentLength(usize),
+    Chunked,
+    UntilEof,
+}
+
 fn parse_status_and_headers(
     header_bytes: &[u8],
-) -> Result<(u16, http::HeaderMap, Option<usize>), ProxyError> {
+) -> Result<(u16, http::HeaderMap, UpstreamBodyMode), ProxyError> {
     let header_str =
         std::str::from_utf8(header_bytes).map_err(|e| ProxyError::Hyper(e.to_string()))?;
     let mut lines = header_str.split("\r\n");
@@ -321,16 +330,28 @@ fn parse_status_and_headers(
         .map_err(|e| ProxyError::Hyper(format!("{e}")))?;
 
     let mut headers = http::HeaderMap::new();
-    let mut content_length = None;
+    let mut content_length: Option<usize> = None;
+    let mut chunked = false;
     for line in lines {
         if let Some((k, v)) = line.split_once(':') {
             let k = k.trim();
             let v = v.trim();
-            if k.eq_ignore_ascii_case("transfer-encoding") || k.eq_ignore_ascii_case("connection") {
+            if k.eq_ignore_ascii_case("connection") {
+                continue;
+            }
+            if k.eq_ignore_ascii_case("transfer-encoding") {
+                // RFC 9112: TE takes precedence over Content-Length.
+                if v.to_ascii_lowercase()
+                    .split(',')
+                    .any(|t| t.trim() == "chunked")
+                {
+                    chunked = true;
+                }
                 continue;
             }
             if k.eq_ignore_ascii_case("content-length") {
                 content_length = v.parse().ok();
+                continue; // decide after TE; only forward when not chunked
             }
             if let (Ok(name), Ok(value)) = (
                 http::HeaderName::from_bytes(k.as_bytes()),
@@ -340,80 +361,215 @@ fn parse_status_and_headers(
             }
         }
     }
-    Ok((code, headers, content_length))
+
+    let mode = if chunked {
+        UpstreamBodyMode::Chunked
+    } else if let Some(cl) = content_length {
+        if let (Ok(name), Ok(value)) = (
+            http::HeaderName::from_bytes(b"content-length"),
+            http::HeaderValue::from_str(&cl.to_string()),
+        ) {
+            headers.insert(name, value);
+        }
+        UpstreamBodyMode::ContentLength(cl)
+    } else {
+        UpstreamBodyMode::UntilEof
+    };
+    Ok((code, headers, mode))
 }
 
-async fn pump_response_body<S: AsyncRead + Unpin + Send + 'static>(
-    mut stream: S,
-    leftover: Bytes,
-    content_length: Option<usize>,
-    max_body: usize,
-    tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
-) {
-    let mut seen = 0usize;
+fn parse_chunk_size_line(line: &[u8]) -> Result<usize, std::io::Error> {
+    let line = std::str::from_utf8(line).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("chunk size utf8: {e}"),
+        )
+    })?;
+    let hex = line.split(';').next().unwrap_or(line).trim();
+    usize::from_str_radix(hex, 16).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("invalid chunk size `{hex}`: {e}"),
+        )
+    })
+}
 
-    if !leftover.is_empty() {
-        if leftover.len() > max_body {
-            let _ = tx
-                .send(Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "response body exceeds limit",
-                )))
-                .await;
-            return;
+/// Buffered reader over leftover + TCP for response body framing.
+struct BodyBuf<S> {
+    stream: S,
+    buf: BytesMut,
+}
+
+impl<S: AsyncRead + Unpin> BodyBuf<S> {
+    fn new(stream: S, leftover: Bytes) -> Self {
+        let mut buf = BytesMut::new();
+        if !leftover.is_empty() {
+            buf.extend_from_slice(&leftover);
         }
-        if let Some(cl) = content_length {
-            if leftover.len() > cl {
-                let _ = tx
-                    .send(Err(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "response longer than Content-Length",
-                    )))
-                    .await;
-                return;
+        Self { stream, buf }
+    }
+
+    async fn fill(&mut self) -> std::io::Result<usize> {
+        let mut tmp = [0u8; 16 * 1024];
+        let n = self.stream.read(&mut tmp).await?;
+        if n > 0 {
+            self.buf.extend_from_slice(&tmp[..n]);
+        }
+        Ok(n)
+    }
+
+    async fn read_until_crlf(&mut self) -> std::io::Result<Bytes> {
+        loop {
+            if let Some(pos) = self.buf.windows(2).position(|w| w == b"\r\n") {
+                let line = self.buf.split_to(pos).freeze();
+                let _ = self.buf.split_to(2);
+                return Ok(line);
             }
-        }
-        seen = leftover.len();
-        if tx.send(Ok(leftover)).await.is_err() {
-            return;
+            if self.fill().await? == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "eof before CRLF",
+                ));
+            }
         }
     }
 
-    let mut tmp = [0u8; 16 * 1024];
-    loop {
-        if let Some(cl) = content_length {
-            if seen >= cl {
-                break;
+    async fn read_exact(&mut self, n: usize) -> std::io::Result<Bytes> {
+        while self.buf.len() < n {
+            if self.fill().await? == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "eof in body",
+                ));
             }
         }
-        let want = match content_length {
-            Some(cl) => (cl - seen).min(tmp.len()),
-            None => tmp.len(),
-        };
-        let n = match stream.read(&mut tmp[..want]).await {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(e) => {
+        Ok(self.buf.split_to(n).freeze())
+    }
+
+    async fn read_some(&mut self, max: usize) -> std::io::Result<Option<Bytes>> {
+        if self.buf.is_empty() && self.fill().await? == 0 {
+            return Ok(None);
+        }
+        let n = self.buf.len().min(max);
+        Ok(Some(self.buf.split_to(n).freeze()))
+    }
+}
+
+async fn pump_response_body<S: AsyncRead + Unpin + Send + 'static>(
+    stream: S,
+    leftover: Bytes,
+    mode: UpstreamBodyMode,
+    max_body: usize,
+    tx: tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+) {
+    let mut br = BodyBuf::new(stream, leftover);
+    match mode {
+        UpstreamBodyMode::Chunked => {
+            if let Err(e) = pump_chunked_body(&mut br, max_body, &tx).await {
                 let _ = tx.send(Err(e)).await;
-                return;
             }
-        };
-        if seen.saturating_add(n) > max_body {
-            let _ = tx
-                .send(Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "response body exceeds limit",
-                )))
-                .await;
-            return;
         }
-        seen += n;
-        if tx
-            .send(Ok(Bytes::copy_from_slice(&tmp[..n])))
-            .await
-            .is_err()
-        {
-            return;
+        UpstreamBodyMode::ContentLength(cl) => {
+            if let Err(e) = pump_content_length_body(&mut br, cl, max_body, &tx).await {
+                let _ = tx.send(Err(e)).await;
+            }
+        }
+        UpstreamBodyMode::UntilEof => {
+            if let Err(e) = pump_until_eof_body(&mut br, max_body, &tx).await {
+                let _ = tx.send(Err(e)).await;
+            }
+        }
+    }
+}
+
+async fn pump_chunked_body<S: AsyncRead + Unpin>(
+    br: &mut BodyBuf<S>,
+    max_body: usize,
+    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+) -> std::io::Result<()> {
+    let mut seen = 0usize;
+    loop {
+        let size_line = br.read_until_crlf().await?;
+        let size = parse_chunk_size_line(&size_line)?;
+        if size == 0 {
+            // Trailers: read header lines until empty line.
+            loop {
+                let trailer = br.read_until_crlf().await?;
+                if trailer.is_empty() {
+                    break;
+                }
+            }
+            return Ok(());
+        }
+        if seen.saturating_add(size) > max_body {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "response body exceeds limit",
+            ));
+        }
+        let data = br.read_exact(size).await?;
+        let crlf = br.read_exact(2).await?;
+        if crlf.as_ref() != b"\r\n" {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "missing CRLF after chunk data",
+            ));
+        }
+        seen += size;
+        if !data.is_empty() && tx.send(Ok(data)).await.is_err() {
+            return Ok(());
+        }
+    }
+}
+
+async fn pump_content_length_body<S: AsyncRead + Unpin>(
+    br: &mut BodyBuf<S>,
+    content_length: usize,
+    max_body: usize,
+    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+) -> std::io::Result<()> {
+    if content_length > max_body {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "response body exceeds limit",
+        ));
+    }
+    let mut seen = 0usize;
+    while seen < content_length {
+        let want = (content_length - seen).min(16 * 1024);
+        let Some(chunk) = br.read_some(want).await? else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "eof before Content-Length",
+            ));
+        };
+        seen += chunk.len();
+        if tx.send(Ok(chunk)).await.is_err() {
+            return Ok(());
+        }
+    }
+    Ok(())
+}
+
+async fn pump_until_eof_body<S: AsyncRead + Unpin>(
+    br: &mut BodyBuf<S>,
+    max_body: usize,
+    tx: &tokio::sync::mpsc::Sender<Result<Bytes, std::io::Error>>,
+) -> std::io::Result<()> {
+    let mut seen = 0usize;
+    loop {
+        let Some(chunk) = br.read_some(16 * 1024).await? else {
+            return Ok(());
+        };
+        if seen.saturating_add(chunk.len()) > max_body {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "response body exceeds limit",
+            ));
+        }
+        seen += chunk.len();
+        if tx.send(Ok(chunk)).await.is_err() {
+            return Ok(());
         }
     }
 }
@@ -446,9 +602,9 @@ where
 
     // Cap header block similarly to request header limits (16 KiB default).
     let (header_bytes, leftover) = read_response_head(&mut stream, 16_384).await?;
-    let (code, headers, content_length) = parse_status_and_headers(&header_bytes)?;
+    let (code, headers, mode) = parse_status_and_headers(&header_bytes)?;
 
-    if let Some(cl) = content_length {
+    if let UpstreamBodyMode::ContentLength(cl) = mode {
         if cl > max_body {
             return Err(ProxyError::BodyTooLarge);
         }
@@ -456,7 +612,7 @@ where
 
     let (tx, rx) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(8);
     tokio::spawn(async move {
-        pump_response_body(stream, leftover, content_length, max_body, tx).await;
+        pump_response_body(stream, leftover, mode, max_body, tx).await;
     });
 
     let mut builder = Response::builder().status(code);
@@ -612,5 +768,124 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(err, ProxyError::BodyTooLarge));
+    }
+
+    #[tokio::test]
+    async fn decodes_upstream_chunked_response() {
+        let (client, mut server) = tokio::io::duplex(64 * 1024);
+        tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 1024];
+            loop {
+                let n = server.read(&mut tmp).await.unwrap();
+                if n == 0 {
+                    break;
+                }
+                buf.extend_from_slice(&tmp[..n]);
+                if buf.windows(5).any(|w| w == b"0\r\n\r\n") {
+                    break;
+                }
+            }
+            // Multi-chunk + trailer; payload must decode to "hello-world".
+            let resp = b"HTTP/1.1 200 OK\r\n\
+Transfer-Encoding: chunked\r\n\
+\r\n\
+5\r\nhello\r\n\
+6\r\n-world\r\n\
+0\r\n\
+X-Trailer: 1\r\n\
+\r\n";
+            server.write_all(resp).await.unwrap();
+        });
+
+        let parts = Request::builder()
+            .method("GET")
+            .uri("http://example/x")
+            .body(())
+            .unwrap()
+            .into_parts()
+            .0;
+        let body = Full::new(Bytes::new());
+        let resp = exchange_http(
+            client,
+            &parts,
+            "/x",
+            &"example".parse().unwrap(),
+            body,
+            1024,
+            None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(resp.status(), 200);
+        assert!(resp.headers().get("transfer-encoding").is_none());
+        assert!(resp.headers().get("content-length").is_none());
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&bytes[..], b"hello-world");
+    }
+
+    #[tokio::test]
+    async fn chunked_response_oversize_fail_closed() {
+        let (client, mut server) = tokio::io::duplex(64 * 1024);
+        tokio::spawn(async move {
+            let mut buf = Vec::new();
+            let mut tmp = [0u8; 1024];
+            loop {
+                let n = server.read(&mut tmp).await.unwrap();
+                if n == 0 {
+                    break;
+                }
+                buf.extend_from_slice(&tmp[..n]);
+                if buf.windows(5).any(|w| w == b"0\r\n\r\n") {
+                    break;
+                }
+            }
+            let resp = concat!(
+                "HTTP/1.1 200 OK\r\n",
+                "Transfer-Encoding: chunked\r\n",
+                "\r\n",
+                "20\r\n",
+                "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n",
+                "0\r\n\r\n",
+            );
+            server.write_all(resp.as_bytes()).await.unwrap();
+        });
+
+        let parts = Request::builder()
+            .method("GET")
+            .uri("http://example/x")
+            .body(())
+            .unwrap()
+            .into_parts()
+            .0;
+        let body = Full::new(Bytes::new());
+        let resp = exchange_http(
+            client,
+            &parts,
+            "/x",
+            &"example".parse().unwrap(),
+            body,
+            16,
+            None,
+        )
+        .await
+        .unwrap();
+        let err = resp.into_body().collect().await.unwrap_err();
+        assert!(
+            err.to_string().contains("exceeds limit"),
+            "unexpected err: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_detects_chunked_mode() {
+        let (code, headers, mode) = parse_status_and_headers(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Length: 99\r\nX-A: 1",
+        )
+        .unwrap();
+        assert_eq!(code, 200);
+        assert!(matches!(mode, UpstreamBodyMode::Chunked));
+        assert!(headers.get("content-length").is_none());
+        assert!(headers.get("x-a").is_some());
     }
 }

@@ -60,6 +60,7 @@ Durable list of follow-ups after **P10–P13**. Active promotion:
 | HTTP/3 full request proxy | `h3` + `h3-quinn` 0.0.10 → `handle_request`; body buffered | **done P14.2** |
 | HTTP/3 streamed bodies | H3 edge streams req/resp; `max_body_bytes` → 413 | **done P14.3** |
 | TCP upstream body streaming | Chunked outbound + streamed upstream response | **done P14.4** |
+| Upstream TE chunked decode | Decode chunked upstream responses end-to-end | **done P14.5** |
 
 ### Won't do (prod)
 
