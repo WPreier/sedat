@@ -28,7 +28,7 @@ docker compose -f docker-compose.dev.yml up --build
 - User config: `--config PATH` (editable).
 - Active copy: `.sedat.active.toml` next to state dir (mode `0600`).
 - Reset: `sedat --resetconfig --config PATH`.
-- Reload: admin `reload` — fail-closed; emits **security-diff audit** lines (`sedat::audit`).
+- Reload: admin `reload` or Unix **SIGHUP** — fail-closed; live limits + static TLS swap (P14.1); emits **security-diff audit** (`sedat::audit`).
 
 ## Listeners
 

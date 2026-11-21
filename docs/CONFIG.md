@@ -166,7 +166,14 @@ sedat [--config PATH] [--listen ADDR] [--resetconfig] [--validate] [--migrate-co
 
 ## Hot reload
 
-SIGHUP (Unix) or admin `reload` command re-reads the user config. On failure, active config is unchanged and the error is logged/returned. On success, `security_diff` changes are logged under `sedat::audit` and summarized in the admin reply.
+Unix **SIGHUP** or admin `reload` re-reads the user config (same code path).
+On failure, active config is unchanged. On success: routes/proxy settings via
+live `ArcSwap`, **limits** via `Limiter::reconfigure`, audit JSONL path/size/age,
+admin token gate, and **static TLS** cert/key swap when `tls.cert_path` /
+`tls.key_path` are set. Security-diff audit is emitted (P09.7).
+
+**Still needs restart:** listen addresses, Landlock/seccomp, metrics sidecar bind,
+ACME enable/renewal loop, ban-share store path/secret.
 
 **Token-only (P12.3):** admin `reload-token` re-reads token sources into the live
 gate without reloading routes/certs. Prefer this when rotating secrets. Full

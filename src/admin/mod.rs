@@ -22,6 +22,7 @@ use crate::acme::AcmeStatus;
 use crate::audit::AuditSink;
 use crate::config::{self, format_audit_summary, security_diff, SedatConfig};
 use crate::limits::Limiter;
+use crate::tls::TlsState;
 
 /// Shared admin state.
 #[derive(Clone)]
@@ -34,8 +35,10 @@ pub struct AdminState {
     pub config: Arc<ArcSwap<SedatConfig>>,
     /// Live admin/metrics token gate (P12.3 hot-rotate + overlap).
     pub tokens: LiveAdminTokens,
-    /// Limiter for stats.
+    /// Limiter for stats (limits reconfigured on reload — P14.1).
     pub limiter: Arc<Limiter>,
+    /// Optional TLS hot-swap target for static cert reload (P14.1).
+    pub tls: Option<TlsState>,
     /// ACME status (optional).
     pub acme_status: Option<Arc<parking_lot::Mutex<AcmeStatus>>>,
     /// Shared JSONL audit sink.
@@ -118,6 +121,28 @@ pub async fn serve_admin(socket_path: &Path, state: AdminState) -> std::io::Resu
         warn!("admin Unix socket not available on this platform");
         std::future::pending::<()>().await;
         Ok(())
+    }
+}
+
+/// Listen for Unix `SIGHUP` and apply the same live reload as admin `reload` (P14.1).
+#[cfg(unix)]
+pub async fn serve_sighup_reload(state: AdminState) {
+    use tokio::signal::unix::{signal, SignalKind};
+    let mut hup = match signal(SignalKind::hangup()) {
+        Ok(s) => s,
+        Err(e) => {
+            warn!(error = %e, "SIGHUP handler not installed");
+            return;
+        }
+    };
+    info!("SIGHUP reload handler ready");
+    while hup.recv().await.is_some() {
+        let reply = apply_live_reload(&state);
+        if reply.starts_with("OK") {
+            info!(%reply, "SIGHUP config reload ok");
+        } else {
+            warn!(%reply, "SIGHUP config reload failed (previous active kept)");
+        }
     }
 }
 
@@ -298,50 +323,7 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
             let body = prometheus_text(state);
             format!("OK metrics\n{body}")
         }
-        "reload" => match config::try_reload(&state.user_config, &state.state_dir) {
-            Ok(active) => {
-                let prev = state.config.load_full();
-                let changes = security_diff(&prev, &active.config);
-                let summary = format_audit_summary(&changes);
-                for c in &changes {
-                    info!(
-                        target: "sedat::audit",
-                        key = %c.key,
-                        old = %c.old,
-                        new = %c.new,
-                        "config reload security diff"
-                    );
-                }
-                if let Err(e) = state.audit.reconfigure(
-                    &active.config.logging.audit_jsonl,
-                    active.config.logging.audit_jsonl_max_bytes,
-                    active.config.logging.audit_jsonl_max_age_secs,
-                ) {
-                    warn!(error = %e, "audit jsonl reconfigure failed");
-                }
-                let overlap = active.config.server.admin_token_overlap_secs;
-                let token_note = match state.tokens.reload_from_config(&active.config, overlap) {
-                    Ok(outcome) => {
-                        audit_token_reload(state, &outcome);
-                        format_token_reload_note(&outcome)
-                    }
-                    Err(TokenReloadWouldDisable) => {
-                        warn!(
-                            target: "sedat::audit",
-                            "config reload kept previous admin token (new sources empty)"
-                        );
-                        state
-                            .audit
-                            .emit_admin_token_reload("rejected_would_disable", None);
-                        " token=kept_fail_closed".into()
-                    }
-                };
-                state.audit.emit_config_reload(&changes, &summary);
-                state.config.store(Arc::new(active.config));
-                format!("OK reload audit={summary}{token_note}\n")
-            }
-            Err(e) => format!("ERR reload: {e}\n"),
-        },
+        "reload" => apply_live_reload(state),
         "reload-token" | "token-reload" | "reload_token" | "token_reload" => {
             reload_admin_token(state)
         }
@@ -374,6 +356,84 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
         other => format!("ERR unknown command: {other}\n"),
     };
     (reply, false)
+}
+
+/// Apply a validated config reload (admin `reload` or Unix SIGHUP).
+///
+/// Updates: routes/proxy settings via `config` ArcSwap, live limits, audit sink,
+/// admin token gate, and optional static TLS certs. Listen addresses, sandbox,
+/// metrics bind, and ban-share store still require a process restart.
+pub fn apply_live_reload(state: &AdminState) -> String {
+    match config::try_reload(&state.user_config, &state.state_dir) {
+        Ok(active) => {
+            let prev = state.config.load_full();
+            let changes = security_diff(&prev, &active.config);
+            let summary = format_audit_summary(&changes);
+            for c in &changes {
+                info!(
+                    target: "sedat::audit",
+                    key = %c.key,
+                    old = %c.old,
+                    new = %c.new,
+                    "config reload security diff"
+                );
+            }
+            if let Err(e) = state.audit.reconfigure(
+                &active.config.logging.audit_jsonl,
+                active.config.logging.audit_jsonl_max_bytes,
+                active.config.logging.audit_jsonl_max_age_secs,
+            ) {
+                warn!(error = %e, "audit jsonl reconfigure failed");
+            }
+            state.limiter.reconfigure(active.config.limits.clone());
+            let cert_note = reload_static_tls(state, &active.config);
+            let overlap = active.config.server.admin_token_overlap_secs;
+            let token_note = match state.tokens.reload_from_config(&active.config, overlap) {
+                Ok(outcome) => {
+                    audit_token_reload(state, &outcome);
+                    format_token_reload_note(&outcome)
+                }
+                Err(TokenReloadWouldDisable) => {
+                    warn!(
+                        target: "sedat::audit",
+                        "config reload kept previous admin token (new sources empty)"
+                    );
+                    state
+                        .audit
+                        .emit_admin_token_reload("rejected_would_disable", None);
+                    " token=kept_fail_closed".into()
+                }
+            };
+            state.audit.emit_config_reload(&changes, &summary);
+            state.config.store(Arc::new(active.config));
+            format!("OK reload audit={summary}{token_note}{cert_note}\n")
+        }
+        Err(e) => format!("ERR reload: {e}\n"),
+    }
+}
+
+/// Hot-swap static TLS material when cert/key paths are set and `tls` is wired.
+fn reload_static_tls(state: &AdminState, cfg: &SedatConfig) -> String {
+    let Some(tls) = state.tls.as_ref() else {
+        return String::new();
+    };
+    let (Some(cert), Some(key)) = (&cfg.tls.cert_path, &cfg.tls.key_path) else {
+        return String::new();
+    };
+    if cert.trim().is_empty() || key.trim().is_empty() {
+        return String::new();
+    }
+    match crate::tls::load_server_config(std::path::Path::new(cert), std::path::Path::new(key)) {
+        Ok(sc) => {
+            tls.swap(sc);
+            info!(cert = %cert, "static TLS cert hot-swapped on reload");
+            " tls=swapped".into()
+        }
+        Err(e) => {
+            warn!(error = %e, cert = %cert, "static TLS reload failed; previous cert kept");
+            " tls=kept_load_error".into()
+        }
+    }
 }
 
 fn reload_admin_token(state: &AdminState) -> String {
@@ -521,6 +581,7 @@ mod tests {
             config: Arc::new(ArcSwap::from_pointee(cfg)),
             tokens,
             limiter: Limiter::new(Default::default()),
+            tls: None,
             acme_status: None,
             audit,
             started_at: now_start(),
@@ -782,6 +843,79 @@ mod tests {
         assert!(r.contains("unban <ip>"), "{r}");
         assert!(r.contains("selftest [json]"), "{r}");
         assert!(r.contains("reload-token"), "{r}");
+    }
+
+    #[test]
+    fn live_reload_updates_limits_and_swaps_tls() {
+        use crate::tls::{self, TlsState};
+
+        let dir = tempfile::tempdir().unwrap();
+        let state_dir = dir.path().join("state");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        let user = dir.path().join("sedat.toml");
+
+        let (cert_a, key_a) = tls::generate_self_signed("a.example").unwrap();
+        let (cert_b, key_b) = tls::generate_self_signed("b.example").unwrap();
+        let cert_path = dir.path().join("cert.pem");
+        let key_path = dir.path().join("key.pem");
+        std::fs::write(&cert_path, &cert_a).unwrap();
+        std::fs::write(&key_path, &key_a).unwrap();
+
+        let toml_v1 = format!(
+            r#"
+schema_version = 1
+[server]
+listen = "127.0.0.1:0"
+listen_tls = "127.0.0.1:0"
+state_dir = "{state}"
+[tls]
+enabled = true
+cert_path = "{cert}"
+key_path = "{key}"
+[limits]
+max_connections = 32
+[[routes.hosts]]
+host = "localhost"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://127.0.0.1:9"
+"#,
+            state = state_dir.display().to_string().replace('\\', "/"),
+            cert = cert_path.display().to_string().replace('\\', "/"),
+            key = key_path.display().to_string().replace('\\', "/"),
+        );
+        std::fs::write(&user, &toml_v1).unwrap();
+        let active = config::load_and_activate(&user, Some(&state_dir)).unwrap();
+
+        let sc = tls::load_server_config(&cert_path, &key_path).unwrap();
+        let tls_state = TlsState::new(sc);
+        let limiter = Limiter::new(active.config.limits.clone());
+        let tokens = LiveAdminTokens::from_config(&active.config);
+        let state = AdminState {
+            user_config: user.clone(),
+            state_dir: state_dir.clone(),
+            config: Arc::new(ArcSwap::from_pointee(active.config)),
+            tokens,
+            limiter: limiter.clone(),
+            tls: Some(tls_state.clone()),
+            acme_status: None,
+            audit: AuditSink::disabled(),
+            started_at: now_start(),
+        };
+
+        // Point files at cert B and raise connection cap.
+        std::fs::write(&cert_path, &cert_b).unwrap();
+        std::fs::write(&key_path, &key_b).unwrap();
+        let toml_v2 = toml_v1.replace("max_connections = 32", "max_connections = 64");
+        std::fs::write(&user, &toml_v2).unwrap();
+
+        let reply = apply_live_reload(&state);
+        assert!(reply.starts_with("OK reload"), "{reply}");
+        assert!(reply.contains("tls=swapped"), "{reply}");
+        assert_eq!(limiter.limits_snapshot().max_connections, 64);
+        assert_eq!(state.config.load().limits.max_connections, 64);
+        // Acceptor still builds after swap (material replaced).
+        let _ = tls_state.acceptor();
     }
 
     #[test]

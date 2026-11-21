@@ -12,8 +12,8 @@ See [ROADMAP_P09.md](ROADMAP_P09.md) and [ROADMAP_P10.md](ROADMAP_P10.md). Highl
 
 ## Deferred / Open backlog
 
-Durable list of follow-ups after **P10/P11/P12**. Active promotion:
-[ROADMAP_P13.md](ROADMAP_P13.md).
+Durable list of follow-ups after **P10–P13**. Active promotion:
+[ROADMAP_P14.md](ROADMAP_P14.md).
 
 ### Explicitly deferred / declined
 
@@ -56,7 +56,7 @@ Durable list of follow-ups after **P10/P11/P12**. Active promotion:
 |------|-------|-----------|
 | Upstream pin: Hostname-Literal + periodisches Re-Resolve | Pin by name + refresh DNS on interval | **done P12.5** |
 | Request-ID on all early deny paths | Close remaining gaps (pre-hyper 400/431) | **done P11.2** |
-| Hot-reload without process restart | Routes/certs partially done; broaden | partial |
+| Hot-reload without process restart | Live limits + static TLS + SIGHUP (P14.1); listen/sandbox/ACME/ban-share still restart | **done P14.1** (partial→broadened) |
 
 ### Won't do (prod)
 

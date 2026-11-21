@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.25] – 2026-11-21
+
+### Added
+
+- **P14.1 Broaden hot-reload:** `Limiter::reconfigure` on admin/`SIGHUP` reload;
+  static TLS cert/key hot-swap when paths are set; Unix SIGHUP handler.
+  Restart still required for listen/sandbox/ACME/ban-share. Roadmap
+  [docs/ROADMAP_P14.md](docs/ROADMAP_P14.md); phase note
+  [docs/phases/P14_01_hot_reload_broaden.md](docs/phases/P14_01_hot_reload_broaden.md).
+
 ## [0.1.24] – 2026-11-21
 
 ### Added

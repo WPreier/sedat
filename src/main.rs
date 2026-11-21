@@ -195,7 +195,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
     let state = ProxyState::with_audit(cfg.clone(), audit.clone());
     let acme_status = None;
 
-    // Admin socket + optional loopback metrics sidecar
+    // Admin socket + optional loopback metrics sidecar + SIGHUP reload (P14.1)
     {
         let admin_state = AdminState {
             user_config,
@@ -203,17 +203,25 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             config: state.config.clone(),
             tokens: admin::LiveAdminTokens::from_config(&cfg),
             limiter: state.limiter.clone(),
+            tls: tls_state.clone(),
             acme_status,
             audit,
             started_at: admin::now_start(),
         };
         let sock = PathBuf::from(&cfg.server.admin_socket);
         let admin_for_metrics = admin_state.clone();
+        let admin_for_sighup = admin_state.clone();
         tokio::spawn(async move {
             if let Err(e) = admin::serve_admin(&sock, admin_state).await {
                 warn!(error = %e, "admin socket terminated");
             }
         });
+        #[cfg(unix)]
+        tokio::spawn(async move {
+            admin::serve_sighup_reload(admin_for_sighup).await;
+        });
+        #[cfg(not(unix))]
+        let _ = admin_for_sighup;
         if let Some(ref listen) = cfg.server.metrics_listen {
             if !listen.is_empty() {
                 if let Ok(addr) = listen.parse::<SocketAddr>() {
