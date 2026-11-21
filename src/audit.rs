@@ -226,6 +226,23 @@ impl AuditSink {
         }));
     }
 
+    /// Ban TTL refreshed because the IP kept hitting while banned (P12.2).
+    pub fn emit_ip_ban_extend(
+        &self,
+        peer: &str,
+        request_id: Option<&str>,
+        duration_secs: u64,
+        previous_remaining_secs: u64,
+    ) {
+        self.emit(json!({
+            "event": "ip_ban_extend",
+            "peer": peer,
+            "request_id": request_id,
+            "duration_secs": duration_secs,
+            "previous_remaining_secs": previous_remaining_secs,
+        }));
+    }
+
     /// Admin socket manually cleared a temporary IP ban (`unban <ip>`).
     pub fn emit_admin_unban(&self, peer: &str) {
         self.emit(json!({

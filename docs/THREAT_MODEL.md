@@ -48,7 +48,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 | T10 | Privilege persistence / RCE blast | Drop after bind; Landlock + seccomp-BPF | `src/hardening` |
 | T11 | HTTP/2 CONTINUATION / HPACK bomb | Caps + hyper; negative corpus | `tests/h2_attack_corpus.rs` |
 | T12 | Plaintext PROXY when PP2-over-TLS expected | `inbound_placement=after_tls` rejects plaintext PROXY | `tests/attack_hygiene.rs` |
-| T13 | Sustained per-IP flood after burst | Temporary IP ban after consecutive rate-limit strikes (`403` until TTL) | `tests/ip_ban.rs`, `src/limits` |
+| T13 | Sustained per-IP flood after burst | Temporary IP ban after consecutive rate-limit strikes (`403` until TTL); sliding extend on continued hits (P12.2) | `tests/ip_ban.rs`, `src/limits` |
 | T14 | Admin socket abuse after ACL bypass | Optional `AUTH` token (constant-time); failed auth audited | `src/admin` |
 | T15 | Upstream DNS rebinding / unexpected peer | Optional `upstream_allowlist` pin; fail-closed connect | `tests/upstream_pin.rs` |
 | T16 | Spoofed / unauthenticated upstream | Optional HTTPS + mTLS (`upstream_mtls_*`, default off) | `tests/upstream_mtls.rs` |

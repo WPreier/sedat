@@ -357,6 +357,14 @@ pub struct LimitsConfig {
     /// Ignored when `ban_after_rate_limit_strikes = 0`.
     #[serde(default = "default_ban_duration")]
     pub ban_duration_secs: u64,
+    /// When true (default), each request while banned refreshes TTL to
+    /// `now + ban_duration_secs` (sliding window; does not grow beyond that).
+    #[serde(default = "default_true")]
+    pub ban_extend_while_banned: bool,
+    /// Minimum seconds between `ip_ban_extend` audit events per IP (TTL still
+    /// refreshes every hit when extend is on). Default **1**; `0` = audit every extend.
+    #[serde(default = "default_ban_extend_min_interval")]
+    pub ban_extend_min_interval_secs: u64,
     /// Separate max concurrent HTTP/3 connections (when enabled).
     #[serde(default = "default_h3_conn")]
     pub max_h3_connections: usize,
@@ -395,6 +403,9 @@ fn default_ban_strikes() -> u32 {
 fn default_ban_duration() -> u64 {
     60
 }
+fn default_ban_extend_min_interval() -> u64 {
+    1
+}
 fn default_h3_conn() -> usize {
     512
 }
@@ -415,6 +426,8 @@ impl Default for LimitsConfig {
             rate_limit_burst: default_burst(),
             ban_after_rate_limit_strikes: default_ban_strikes(),
             ban_duration_secs: default_ban_duration(),
+            ban_extend_while_banned: true,
+            ban_extend_min_interval_secs: default_ban_extend_min_interval(),
             max_h3_connections: default_h3_conn(),
             max_h3_streams: default_h3_streams(),
         }
