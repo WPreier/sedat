@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.31] – 2026-11-21
+
+### Fixed
+
+- **P15.1 Stabilize Pebble CI:** Compose Pebble `command` matches image ENTRYPOINT
+  `/app` (flags only; drop bogus `-dnsserver`); CI wait fails fast with container
+  logs; `pebble-issue` job uses `continue-on-error: true` so residual ACME flakes
+  do not block merges. Roadmap [docs/ROADMAP_P15.md](docs/ROADMAP_P15.md); phase
+  note [docs/phases/P15_01_pebble_ci_stabilize.md](docs/phases/P15_01_pebble_ci_stabilize.md).
+
 ## [0.1.30] – 2026-11-21
 
 ### Changed
