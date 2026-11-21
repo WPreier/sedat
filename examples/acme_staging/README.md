@@ -14,6 +14,7 @@ openssl s_client -connect 127.0.0.1:8443 -servername localhost </dev/null | head
 ```bash
 docker compose -f docker-compose.dev.yml --profile acme up pebble
 # Point acme.directory = "pebble" and dns_provider = "file"
+# (also: cloudflare | webhook — see docs/phases/P13_02_dns_providers.md)
 # With PEBBLE_VA_ALWAYS_VALID=1, file DNS + order_once completes without real DNS.
 
 # One-shot CI-style issuance:

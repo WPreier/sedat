@@ -9,8 +9,8 @@ commit + push/PR, wait for review.
 ## Suggested order
 
 ```text
-P13.1 E8 HTTP/3 attack corpus   ← programmatic QUIC/H3 flood (small disk)
-P13.2 Multiple DNS providers    ← trait ready; Cloudflare first
+P13.1 E8 HTTP/3 attack corpus   ← done (v0.1.23)
+P13.2 Multiple DNS providers    ← Cloudflare API + webhook (v0.1.24)
 … later: fuller H3 request proxy when h3-quinn tracks quinn …
 ```
 
@@ -28,12 +28,13 @@ P13.2 Multiple DNS providers    ← trait ready; Cloudflare first
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Additional ACME DNS providers beyond Cloudflare / file |
+| **Status** | **done** (v0.1.24) |
+| **Behavior** | Live Cloudflare DNS-01 + generic HTTP webhook; `file` remains default |
+| **Phase note** | [phases/P13_02_dns_providers.md](phases/P13_02_dns_providers.md) |
 
 ## Status board
 
 | Step | Item | Status |
 |------|------|--------|
 | 1 | E8 H3 attack corpus | **done** (v0.1.23) |
-| 2 | Multiple DNS providers | pending |
+| 2 | Multiple DNS providers | **done** (v0.1.24) |

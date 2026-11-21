@@ -20,8 +20,12 @@ enabled = false
 directory = "staging"
 email = "admin@example.com"
 domains = []
-dns_provider = "file"
+dns_provider = "file"       # file | cloudflare | webhook
 dns_file = "./state/acme-dns-challenge.txt"
+# cloudflare_api_token = ""  # or SEDAT_CLOUDFLARE_API_TOKEN
+# cloudflare_zone_id = ""
+# dns_webhook_url = ""       # required when dns_provider = "webhook"
+# dns_webhook_bearer = ""    # or SEDAT_DNS_WEBHOOK_BEARER
 # ari = true                 # prefer RFC 9773 renewalInfo when CA supports it
 # renew_days_before = 30     # fallback when ARI unavailable
 

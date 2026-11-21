@@ -30,7 +30,7 @@ Durable list of follow-ups after **P10/P11/P12**. Active promotion:
 | Ban-State über Replicas teilen | File-backed HMAC shared ban map (not Redis) | **done P12.6** |
 | Sliding ban / Verlängerung bei Strike während Ban | Extend TTL if abuse continues while banned | **done P12.2** |
 | Doc formula: `limits.max_connections` ↔ `MemoryMax` / `LimitNOFILE` | Ops guidance aligning TOML + cgroup | **done P11.5** |
-| Multiple DNS providers | Trait ready; Cloudflare first | **P13.2** |
+| Multiple DNS providers | Cloudflare API + webhook; `file` default | **done P13.2** |
 
 ### Audit / logging / metrics
 

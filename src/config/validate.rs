@@ -228,11 +228,35 @@ pub fn validate_config(cfg: &SedatConfig, source: &str) -> Result<(), Validation
             ));
         }
         match cfg.acme.dns_provider.as_str() {
-            "file" | "cloudflare" => {}
+            "file" | "cloudflare" | "webhook" => {}
             other => {
                 return Err(err(
                     find_line(source, other),
-                    format!("unknown dns_provider `{other}`"),
+                    format!("unknown dns_provider `{other}` (expected file|cloudflare|webhook)"),
+                ));
+            }
+        }
+        if cfg.acme.dns_provider == "webhook" && cfg.acme.dns_webhook_url.trim().is_empty() {
+            return Err(err(
+                find_line(source, "dns_webhook_url").max(find_line(source, "[acme]")),
+                "acme.dns_provider=webhook requires acme.dns_webhook_url",
+            ));
+        }
+        if cfg.acme.dns_provider == "cloudflare" {
+            let token_env = std::env::var("SEDAT_CLOUDFLARE_API_TOKEN")
+                .ok()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+            let token_cfg = cfg
+                .acme
+                .cloudflare_api_token
+                .as_ref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+            if !token_env && !token_cfg {
+                return Err(err(
+                    find_line(source, "cloudflare_api_token").max(find_line(source, "[acme]")),
+                    "acme.dns_provider=cloudflare requires SEDAT_CLOUDFLARE_API_TOKEN or acme.cloudflare_api_token",
                 ));
             }
         }
@@ -587,5 +611,65 @@ upstream_mtls_key = "/tmp/client.key"
             err.to_string().contains("https://") || err.to_string().contains("upstream_mtls"),
             "{err}"
         );
+    }
+
+    #[test]
+    fn rejects_webhook_without_url() {
+        let toml = r#"
+schema_version = 1
+[acme]
+enabled = true
+directory = "staging"
+domains = ["example.com"]
+dns_provider = "webhook"
+[[routes.hosts]]
+host = "example.com"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://127.0.0.1:9080"
+"#;
+        let err = parse_toml(toml).unwrap_err();
+        assert!(err.to_string().contains("dns_webhook_url"), "{err}");
+    }
+
+    #[test]
+    fn rejects_cloudflare_without_token() {
+        let toml = r#"
+schema_version = 1
+[acme]
+enabled = true
+directory = "staging"
+domains = ["example.com"]
+dns_provider = "cloudflare"
+[[routes.hosts]]
+host = "example.com"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://127.0.0.1:9080"
+"#;
+        let err = parse_toml(toml).unwrap_err();
+        assert!(
+            err.to_string().contains("cloudflare") || err.to_string().contains("token"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn accepts_webhook_with_url() {
+        let toml = r#"
+schema_version = 1
+[acme]
+enabled = true
+directory = "staging"
+domains = ["example.com"]
+dns_provider = "webhook"
+dns_webhook_url = "https://hooks.example/dns"
+[[routes.hosts]]
+host = "example.com"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://127.0.0.1:9080"
+"#;
+        parse_toml(toml).expect("webhook with url should validate");
     }
 }

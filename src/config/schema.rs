@@ -156,15 +156,24 @@ pub struct AcmeConfig {
     /// Domains to request.
     #[serde(default)]
     pub domains: Vec<String>,
-    /// DNS provider id: `file` or `cloudflare`.
+    /// DNS provider id: `file` (default), `cloudflare`, or `webhook`.
     #[serde(default = "default_dns_provider")]
     pub dns_provider: String,
     /// File path for file-based DNS challenge material.
     #[serde(default = "default_dns_file")]
     pub dns_file: String,
-    /// Cloudflare API token (env preferred in production).
+    /// Cloudflare API token (`SEDAT_CLOUDFLARE_API_TOKEN` wins when set).
     #[serde(default)]
     pub cloudflare_api_token: Option<String>,
+    /// Optional Cloudflare zone id (skips zone name lookup when set).
+    #[serde(default)]
+    pub cloudflare_zone_id: Option<String>,
+    /// Webhook URL for `dns_provider = "webhook"` (required for that provider).
+    #[serde(default)]
+    pub dns_webhook_url: String,
+    /// Optional bearer for webhook (`SEDAT_DNS_WEBHOOK_BEARER` wins when set).
+    #[serde(default)]
+    pub dns_webhook_bearer: Option<String>,
     /// Prefer ACME ARI (RFC 9773) when the CA directory exposes `renewalInfo`.
     ///
     /// Default **true** (safe): if ARI is unavailable, fall back to
@@ -202,6 +211,9 @@ impl Default for AcmeConfig {
             dns_provider: default_dns_provider(),
             dns_file: default_dns_file(),
             cloudflare_api_token: None,
+            cloudflare_zone_id: None,
+            dns_webhook_url: String::new(),
+            dns_webhook_bearer: None,
             ari: default_acme_ari(),
             renew_days_before: default_renew_days_before(),
         }
