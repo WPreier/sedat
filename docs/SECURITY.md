@@ -60,7 +60,7 @@ Applied **after** privilege drop. Unsupported kernels: `auto` skips; `required` 
 ## Rate limits & hygiene
 
 - Token bucket per client IP (after TLS / inbound PROXY rewrite, before expensive proxy work).
-- **Temporary IP ban (P10.3 / P11.1 / P12.2):** after `ban_after_rate_limit_strikes` consecutive denials (default 20), ban for `ban_duration_secs` (default 60) → **403** until expiry. Default **sliding**: hits while banned refresh TTL (`ban_extend_while_banned = true`). Set strikes to `0` to disable bans. Ban/extend/unban logged + optional JSONL (`ip_ban` / `ip_ban_extend` / `ip_unban`); admin `bans` / `unban <ip>` for ops clear (`admin_unban`).
+- **Temporary IP ban (P10.3 / P11.1 / P12.2 / P12.6):** after `ban_after_rate_limit_strikes` consecutive denials (default 20), ban for `ban_duration_secs` (default 60) → **403** until expiry. Default **sliding**: hits while banned refresh TTL (`ban_extend_while_banned = true`). Set strikes to `0` to disable bans. Ban/extend/unban logged + optional JSONL (`ip_ban` / `ip_ban_extend` / `ip_unban`); admin `bans` / `unban <ip>` for ops clear (`admin_unban`). Optional **replica share** via HMAC JSON file (`ban_share_path` + secret; max expiry wins).
 - Caps: connections, request line, header count/size, body size.
 - Unknown Host: reject (default).
 

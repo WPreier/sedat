@@ -64,8 +64,9 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 
 | | |
 |--|--|
-| **Status** | pending (large) |
-| **Behavior** | Share temporary bans across SeDat instances |
+| **Status** | **done** (v0.1.22) |
+| **Behavior** | File-backed HMAC JSON ban map (`ban_share_path`); max expiry wins; unban tombstones; secret required when enabled |
+| **Phase note** | [phases/P12_06_shared_ban_state.md](phases/P12_06_shared_ban_state.md) |
 
 ## Status board
 
@@ -76,4 +77,9 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 | 3 | Token rotation w/o reload | **done** (v0.1.19) |
 | 4 | Time-based audit rotate | **done** (v0.1.20) |
 | 5 | Upstream pin re-resolve | **done** (v0.1.21) |
-| 6 | Shared ban state | pending |
+| 6 | Shared ban state | **done** (v0.1.22) |
+
+## P12 complete
+
+All planned P12 steps are shipped (v0.1.17–v0.1.22). Later backlog remains in
+[IDEAS.md](IDEAS.md) (e.g. **E8** H3 corpus, multiple DNS providers).
