@@ -25,6 +25,7 @@ admin_socket = "./state/admin.sock"  # Unix only
 # admin_group = "sedat-admin"        # optional → socket 0660 + group
 # admin_token = ""                   # empty = FS ACL only; prefer env/file in prod
 # admin_token_file = "./state/admin.token"
+# admin_token_overlap_secs = 300     # dual-token window after reload-token (0 = hard cut)
 # metrics_listen = "127.0.0.1:9090"  # loopback Prometheus; Bearer if token set (P12.1)
 
 [tls]
@@ -122,6 +123,9 @@ Additional P09 / P10 rules:
   JSONL (TTL still slides every hit).
 - `server.admin_token` max 512 bytes; `admin_token_file` must be empty or a local path.
 - Admin token precedence: `SEDAT_ADMIN_TOKEN` → `admin_token_file` → `admin_token`.
+- Live token gate (P12.3): admin `reload-token` refreshes without full process
+  restart; `admin_token_overlap_secs` (default 300) keeps the previous token
+  valid during rotation; empty sources while auth is on are **fail-closed**.
 - `upstream_allowlist` entries must be valid IPs/CIDRs when set.
 - `upstream` may be `http://` or `https://`. `upstream_mtls_*` requires `https://`;
   cert+key must both be set or both empty; PEM paths must exist when set.
@@ -148,6 +152,10 @@ sedat [--config PATH] [--listen ADDR] [--resetconfig] [--validate] [--migrate-co
 ## Hot reload
 
 SIGHUP (Unix) or admin `reload` command re-reads the user config. On failure, active config is unchanged and the error is logged/returned. On success, `security_diff` changes are logged under `sedat::audit` and summarized in the admin reply.
+
+**Token-only (P12.3):** admin `reload-token` re-reads token sources into the live
+gate without reloading routes/certs. Prefer this when rotating secrets. Full
+`reload` also refreshes the token gate with the same fail-closed / overlap rules.
 
 ## Examples
 

@@ -8,6 +8,7 @@ state_dir = "./state"
 admin_socket = "./state/admin.sock"
 admin_token = ""
 admin_token_file = ""
+admin_token_overlap_secs = 300
 
 [tls]
 enabled = false

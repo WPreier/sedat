@@ -45,7 +45,7 @@ Durable list of follow-ups after **P10/P11**. Active promotion:
 | Item | Notes | Suggested |
 |------|-------|-----------|
 | Token auch für Metrics-Sidecar | Auth on loopback `/metrics` when token set | **done P12.1** |
-| Token-Rotation ohne Reload | Hot-swap admin token (file watch / admin cmd) | P12.3 |
+| Token-Rotation ohne Reload | Hot-swap admin token (`reload-token` + overlap) | **done P12.3** |
 | Selftest: Upstream-TCP + TLS-ALPN | Deeper connectivity checks | **done P11.6** |
 | `selftest --json` | Machine-readable selftest output | **done P11.6** |
 | Allowlist parseable check in selftest | Validate `upstream_allowlist` / PROXY CIDRs | **done P11.6** |

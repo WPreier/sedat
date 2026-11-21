@@ -40,8 +40,9 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 
 | | |
 |--|--|
-| **Status** | pending |
-| **Behavior** | Hot-swap admin/metrics token (file watch and/or admin command) |
+| **Status** | **done** (v0.1.19) |
+| **Behavior** | Admin `reload-token` re-reads env/file/config into live gate; dual-token overlap; fail-closed if sources empty |
+| **Phase note** | [phases/P12_03_token_rotation.md](phases/P12_03_token_rotation.md) |
 
 ### P12.4 – Time-based audit log rotation
 
@@ -70,7 +71,7 @@ P12.6 Shared ban state (replicas) ← multi-instance (larger)
 |------|------|--------|
 | 1 | Metrics-sidecar token | **done** (v0.1.17) |
 | 2 | Sliding / extending bans | **done** (v0.1.18) |
-| 3 | Token rotation w/o reload | pending |
+| 3 | Token rotation w/o reload | **done** (v0.1.19) |
 | 4 | Time-based audit rotate | pending |
 | 5 | Upstream pin re-resolve | pending |
 | 6 | Shared ban state | pending |

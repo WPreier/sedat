@@ -1,5 +1,9 @@
 //! Admin socket capability-token helpers (constant-time verify).
 
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use parking_lot::Mutex;
 use sha2::{Digest, Sha256};
 
 use crate::config::SedatConfig;
@@ -7,7 +11,10 @@ use crate::config::SedatConfig;
 /// Environment variable that overrides config / token file when non-empty.
 pub const ADMIN_TOKEN_ENV: &str = "SEDAT_ADMIN_TOKEN";
 
-/// Resolve the expected admin token.
+/// Default dual-token overlap window (seconds) after a successful rotate.
+pub const DEFAULT_TOKEN_OVERLAP_SECS: u64 = 300;
+
+/// Resolve the expected admin token from env / file / config (no live cache).
 ///
 /// Precedence (first non-empty wins):
 /// 1. `SEDAT_ADMIN_TOKEN` environment variable
@@ -16,6 +23,9 @@ pub const ADMIN_TOKEN_ENV: &str = "SEDAT_ADMIN_TOKEN";
 ///
 /// Empty result → token auth **disabled** (filesystem ACL only; fine for local
 /// dev, not recommended alone in production).
+///
+/// Prefer [`LiveAdminTokens`] at runtime so rotation is fail-closed and can keep
+/// a previous token during an overlap window.
 #[must_use]
 pub fn resolve_admin_token(cfg: &SedatConfig) -> Option<String> {
     if let Ok(v) = std::env::var(ADMIN_TOKEN_ENV) {
@@ -38,6 +48,145 @@ pub fn resolve_admin_token(cfg: &SedatConfig) -> Option<String> {
         None
     } else {
         Some(inline.to_string())
+    }
+}
+
+/// Outcome of refreshing the live admin token from sources.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenReloadOutcome {
+    /// Still no token configured.
+    UnchangedEmpty,
+    /// Same token as before.
+    Unchanged,
+    /// Auth newly enabled (was off).
+    Enabled,
+    /// Current token replaced; previous may remain valid for `overlap_secs`.
+    Rotated {
+        /// Overlap window applied (0 = hard cut).
+        overlap_secs: u64,
+    },
+}
+
+/// Fail-closed rejection when a reload would clear a configured token.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenReloadWouldDisable;
+
+impl std::fmt::Display for TokenReloadWouldDisable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("new token sources empty; refusing to disable admin auth (fail-closed)")
+    }
+}
+
+#[derive(Debug, Clone)]
+struct TokenSnapshot {
+    current: Option<String>,
+    previous: Option<String>,
+    previous_until: Option<Instant>,
+}
+
+/// Live admin/metrics token gate with optional dual-token overlap (P12.3).
+///
+/// Updated via admin `reload-token` (or as part of config `reload`) — not on every
+/// request — so a briefly empty/unreadable token file cannot silently open auth.
+#[derive(Debug, Clone)]
+pub struct LiveAdminTokens {
+    inner: Arc<Mutex<TokenSnapshot>>,
+}
+
+impl LiveAdminTokens {
+    /// Build from an already-resolved token (startup).
+    #[must_use]
+    pub fn new(initial: Option<String>) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(TokenSnapshot {
+                current: initial,
+                previous: None,
+                previous_until: None,
+            })),
+        }
+    }
+
+    /// Resolve sources and construct (startup helper).
+    #[must_use]
+    pub fn from_config(cfg: &SedatConfig) -> Self {
+        Self::new(resolve_admin_token(cfg))
+    }
+
+    /// Whether a non-empty current token is configured (auth required).
+    #[must_use]
+    pub fn is_required(&self) -> bool {
+        self.inner.lock().current.is_some()
+    }
+
+    /// Constant-time match against current and (if still in window) previous.
+    #[must_use]
+    pub fn matches_presented(&self, presented: &str) -> bool {
+        if presented.is_empty() {
+            return false;
+        }
+        let snap = self.inner.lock();
+        if let Some(ref cur) = snap.current {
+            if token_matches(presented, cur) {
+                return true;
+            }
+        }
+        if let (Some(ref prev), Some(until)) = (&snap.previous, snap.previous_until) {
+            if Instant::now() < until && token_matches(presented, prev) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Metrics Bearer gate using the live store (fail-closed when required).
+    #[must_use]
+    pub fn metrics_authorized(&self, authorization_header: Option<&str>) -> bool {
+        if !self.is_required() {
+            return true;
+        }
+        let Some(raw) = authorization_header else {
+            return false;
+        };
+        let Some(presented) = parse_bearer_authorization(raw) else {
+            return false;
+        };
+        self.matches_presented(presented)
+    }
+
+    /// Re-read env / file / config into the live store.
+    ///
+    /// Fail-closed: if a token is currently required and sources resolve empty,
+    /// the store is **unchanged** and [`TokenReloadWouldDisable`] is returned.
+    pub fn reload_from_config(
+        &self,
+        cfg: &SedatConfig,
+        overlap_secs: u64,
+    ) -> Result<TokenReloadOutcome, TokenReloadWouldDisable> {
+        let newly = resolve_admin_token(cfg);
+        let mut snap = self.inner.lock();
+        match (&snap.current, newly) {
+            (Some(_), None) => Err(TokenReloadWouldDisable),
+            (None, None) => Ok(TokenReloadOutcome::UnchangedEmpty),
+            (None, Some(n)) => {
+                snap.current = Some(n);
+                snap.previous = None;
+                snap.previous_until = None;
+                Ok(TokenReloadOutcome::Enabled)
+            }
+            (Some(old), Some(n)) if token_matches(old, &n) => Ok(TokenReloadOutcome::Unchanged),
+            (Some(old), Some(n)) => {
+                if overlap_secs > 0 {
+                    snap.previous = Some(old.clone());
+                    snap.previous_until =
+                        Some(Instant::now() + Duration::from_secs(overlap_secs));
+                } else {
+                    snap.previous = None;
+                    snap.previous_until = None;
+                }
+                snap.current = Some(n);
+                Ok(TokenReloadOutcome::Rotated { overlap_secs })
+            }
+        }
     }
 }
 
@@ -173,5 +322,67 @@ mod tests {
             Some("secret"),
             Some("Bearer secret")
         ));
+    }
+
+    #[test]
+    fn live_tokens_rotate_with_overlap_and_fail_closed() {
+        std::env::remove_var(ADMIN_TOKEN_ENV);
+        let mut cfg = SedatConfig {
+            schema_version: 1,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.admin_token = "alpha".into();
+        let live = LiveAdminTokens::from_config(&cfg);
+        assert!(live.is_required());
+        assert!(live.matches_presented("alpha"));
+
+        cfg.server.admin_token = "beta".into();
+        let out = live.reload_from_config(&cfg, 60).unwrap();
+        assert_eq!(out, TokenReloadOutcome::Rotated { overlap_secs: 60 });
+        assert!(live.matches_presented("beta"));
+        assert!(live.matches_presented("alpha")); // overlap
+
+        cfg.server.admin_token.clear();
+        assert_eq!(
+            live.reload_from_config(&cfg, 60),
+            Err(TokenReloadWouldDisable)
+        );
+        assert!(live.matches_presented("beta")); // unchanged
+    }
+
+    #[test]
+    fn live_tokens_hard_cut_when_overlap_zero() {
+        std::env::remove_var(ADMIN_TOKEN_ENV);
+        let mut cfg = SedatConfig {
+            schema_version: 1,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.admin_token = "one".into();
+        let live = LiveAdminTokens::from_config(&cfg);
+        cfg.server.admin_token = "two".into();
+        assert_eq!(
+            live.reload_from_config(&cfg, 0).unwrap(),
+            TokenReloadOutcome::Rotated { overlap_secs: 0 }
+        );
+        assert!(live.matches_presented("two"));
+        assert!(!live.matches_presented("one"));
     }
 }

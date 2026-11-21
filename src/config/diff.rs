@@ -78,6 +78,12 @@ pub fn security_diff(old: &SedatConfig, new: &SedatConfig) -> Vec<SecurityChange
         &old.server.admin_token_file,
         &new.server.admin_token_file,
     );
+    push(
+        &mut out,
+        "server.admin_token_overlap_secs",
+        &old.server.admin_token_overlap_secs.to_string(),
+        &new.server.admin_token_overlap_secs.to_string(),
+    );
     push_opt(
         &mut out,
         "server.metrics_listen",

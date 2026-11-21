@@ -10,7 +10,6 @@ use rustls::pki_types::ServerName;
 use rustls::ClientConfig;
 use serde_json::json;
 
-use crate::admin::auth::resolve_admin_token;
 use crate::admin::AdminState;
 use crate::config::{parse_cidr, CURRENT_SCHEMA_VERSION};
 use crate::proxy::encode_proxy_v2;
@@ -171,7 +170,7 @@ pub fn run_selftest(state: &AdminState) -> SelftestReport {
         format!("socket={}", sock.display()),
     ));
 
-    let token_required = resolve_admin_token(&cfg).is_some();
+    let token_required = state.tokens.is_required();
     checks.push(check(
         "admin_auth",
         true, // configuration presence is informational; both modes are valid
@@ -579,10 +578,12 @@ mod tests {
     use std::sync::Arc;
 
     fn state_with_cfg(cfg: SedatConfig) -> AdminState {
+        let tokens = crate::admin::LiveAdminTokens::from_config(&cfg);
         AdminState {
             user_config: "x".into(),
             state_dir: cfg.server.state_dir.clone().into(),
             config: Arc::new(ArcSwap::from_pointee(cfg)),
+            tokens,
             limiter: Limiter::new(Default::default()),
             acme_status: None,
             audit: AuditSink::disabled(),
