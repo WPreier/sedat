@@ -247,6 +247,17 @@ impl AuditSink {
         }));
     }
 
+    /// Failed metrics-sidecar Bearer authentication (P12.1).
+    /// Never includes the presented secret.
+    pub fn emit_metrics_auth_fail(&self, reason: &str) {
+        self.emit(json!({
+            "event": "metrics_auth_fail",
+            "request_id": Value::Null,
+            "peer": Value::Null,
+            "reason": reason,
+        }));
+    }
+
     /// Admin `selftest` result summary (optional ops audit).
     pub fn emit_admin_selftest(&self, ok: bool, failed: &[String]) {
         self.emit(json!({

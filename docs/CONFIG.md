@@ -25,7 +25,7 @@ admin_socket = "./state/admin.sock"  # Unix only
 # admin_group = "sedat-admin"        # optional → socket 0660 + group
 # admin_token = ""                   # empty = FS ACL only; prefer env/file in prod
 # admin_token_file = "./state/admin.token"
-# metrics_listen = "127.0.0.1:9090"  # optional loopback Prometheus sidecar
+# metrics_listen = "127.0.0.1:9090"  # loopback Prometheus; Bearer if token set (P12.1)
 
 [tls]
 enabled = false

@@ -2,6 +2,8 @@
 # Scrape SeDat Prometheus metrics from the admin Unix socket (no public HTTP).
 # Usage: scripts/prometheus_admin_scrape.sh [/path/to/admin.sock]
 # If SEDAT_ADMIN_TOKEN is set, AUTH is sent first (P10.4).
+# For the HTTP sidecar (server.metrics_listen), use Bearer instead (P12.1):
+#   curl -sH "Authorization: Bearer $SEDAT_ADMIN_TOKEN" http://127.0.0.1:9090/metrics
 set -euo pipefail
 SOCK="${1:-./state/admin.sock}"
 if [[ ! -S "$SOCK" ]]; then
