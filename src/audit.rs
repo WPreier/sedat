@@ -45,6 +45,24 @@ const PROXY_DENY_REASON_COUNT: usize = 13;
 
 const _: () = assert!(PROXY_DENY_REASONS.len() == PROXY_DENY_REASON_COUNT);
 
+/// Stable Prometheus reason labels for pre-HTTP PROXY rejects (P17.3).
+pub const PROXY_REJECT_REASONS: &[&str] = &[
+    "untrusted_or_disabled",
+    "plaintext_when_after_tls",
+    "malformed",
+    "other",
+];
+
+/// Stable Prometheus stage labels for pre-HTTP PROXY rejects (P17.3).
+pub const PROXY_REJECT_STAGES: &[&str] = &["plaintext", "after_tls", "other"];
+
+const PROXY_REJECT_REASON_COUNT: usize = 4;
+const PROXY_REJECT_STAGE_COUNT: usize = 3;
+const PROXY_REJECT_SERIES: usize = PROXY_REJECT_REASON_COUNT * PROXY_REJECT_STAGE_COUNT;
+
+const _: () = assert!(PROXY_REJECT_REASONS.len() == PROXY_REJECT_REASON_COUNT);
+const _: () = assert!(PROXY_REJECT_STAGES.len() == PROXY_REJECT_STAGE_COUNT);
+
 /// Shared audit sink (cheap to clone).
 #[derive(Clone, Debug)]
 pub struct AuditSink {
@@ -57,6 +75,8 @@ struct Inner {
     dropped: AtomicU64,
     /// Per-reason HTTP-path security denial counts (even when JSONL is disabled).
     proxy_deny: [AtomicU64; PROXY_DENY_REASON_COUNT],
+    /// Per-(reason,stage) inbound PROXY reject counts (P17.3).
+    proxy_reject: [AtomicU64; PROXY_REJECT_SERIES],
 }
 
 fn proxy_deny_index(reason: &str) -> usize {
@@ -64,6 +84,18 @@ fn proxy_deny_index(reason: &str) -> usize {
         .iter()
         .position(|&r| r == reason)
         .unwrap_or(PROXY_DENY_REASON_COUNT - 1)
+}
+
+fn proxy_reject_index(reason: &str, stage: &str) -> usize {
+    let ri = PROXY_REJECT_REASONS
+        .iter()
+        .position(|&r| r == reason)
+        .unwrap_or(PROXY_REJECT_REASON_COUNT - 1);
+    let si = PROXY_REJECT_STAGES
+        .iter()
+        .position(|&s| s == stage)
+        .unwrap_or(PROXY_REJECT_STAGE_COUNT - 1);
+    ri * PROXY_REJECT_STAGE_COUNT + si
 }
 
 #[derive(Debug, Default)]
@@ -86,6 +118,7 @@ impl AuditSink {
                 state: Mutex::new(SinkState::default()),
                 dropped: AtomicU64::new(0),
                 proxy_deny: std::array::from_fn(|_| AtomicU64::new(0)),
+                proxy_reject: std::array::from_fn(|_| AtomicU64::new(0)),
             }),
         }
     }
@@ -141,6 +174,35 @@ impl AuditSink {
     fn record_proxy_deny(&self, reason: &str) {
         let i = proxy_deny_index(reason);
         self.inner.proxy_deny[i].fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Per-(reason,stage) `proxy_reject` counts for Prometheus (P17.3).
+    #[must_use]
+    pub fn proxy_reject_gauges(&self) -> Vec<(&'static str, &'static str, u64)> {
+        let mut out = Vec::with_capacity(PROXY_REJECT_SERIES);
+        for (ri, &reason) in PROXY_REJECT_REASONS.iter().enumerate() {
+            for (si, &stage) in PROXY_REJECT_STAGES.iter().enumerate() {
+                let i = ri * PROXY_REJECT_STAGE_COUNT + si;
+                out.push((
+                    reason,
+                    stage,
+                    self.inner.proxy_reject[i].load(Ordering::Relaxed),
+                ));
+            }
+        }
+        out
+    }
+
+    /// Count for one reject reason/stage pair (unknown → `"other"` buckets).
+    #[must_use]
+    pub fn proxy_reject_count(&self, reason: &str, stage: &str) -> u64 {
+        let i = proxy_reject_index(reason, stage);
+        self.inner.proxy_reject[i].load(Ordering::Relaxed)
+    }
+
+    fn record_proxy_reject(&self, reason: &str, stage: &str) {
+        let i = proxy_reject_index(reason, stage);
+        self.inner.proxy_reject[i].fetch_add(1, Ordering::Relaxed);
     }
 
     /// Hold the sink lock while `f` runs (unit tests: force try_lock drops).
@@ -284,7 +346,9 @@ impl AuditSink {
     /// Inbound PROXY framing rejected before HTTP (no request_id; connection dropped).
     ///
     /// `stage` is `plaintext` or `after_tls`. `reason` uses [`crate::proxy::ProxyRejectReason::as_str`].
+    /// Always increments Prometheus `sedat_proxy_reject_total{reason,stage}` (P17.3).
     pub fn emit_proxy_reject(&self, peer: &str, reason: &str, stage: &str) {
+        self.record_proxy_reject(reason, stage);
         self.emit(json!({
             "event": "proxy_reject",
             "request_id": Value::Null,
@@ -542,6 +606,22 @@ mod tests {
         assert_eq!(v["reason"], "untrusted_or_disabled");
         assert_eq!(v["stage"], "plaintext");
         assert!(v["request_id"].is_null());
+        assert_eq!(s.proxy_reject_count("untrusted_or_disabled", "plaintext"), 1);
+    }
+
+    #[test]
+    fn proxy_reject_counters_fixed_cardinality() {
+        let s = AuditSink::disabled();
+        assert_eq!(s.proxy_reject_gauges().len(), PROXY_REJECT_SERIES);
+        assert!(s.proxy_reject_gauges().iter().all(|(_, _, v)| *v == 0));
+
+        s.emit_proxy_reject("127.0.0.1:1", "malformed", "after_tls");
+        s.emit_proxy_reject("127.0.0.1:2", "malformed", "after_tls");
+        s.emit_proxy_reject("127.0.0.1:3", "weird", "plaintext");
+
+        assert_eq!(s.proxy_reject_count("malformed", "after_tls"), 2);
+        assert_eq!(s.proxy_reject_count("other", "plaintext"), 1);
+        assert_eq!(s.proxy_reject_count("untrusted_or_disabled", "plaintext"), 0);
     }
 
     #[test]

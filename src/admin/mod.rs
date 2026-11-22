@@ -643,6 +643,16 @@ pub fn prometheus_text(state: &AdminState) -> String {
     for (reason, v) in state.audit.proxy_deny_gauges() {
         out.push_str(&format!("sedat_proxy_deny_total{{reason=\"{reason}\"}} {v}\n"));
     }
+    // P17.3: fixed-cardinality pre-HTTP inbound PROXY rejects.
+    out.push_str(
+        "# HELP sedat_proxy_reject_total Pre-HTTP inbound PROXY rejects by reason and stage.\n\
+         # TYPE sedat_proxy_reject_total counter\n",
+    );
+    for (reason, stage, v) in state.audit.proxy_reject_gauges() {
+        out.push_str(&format!(
+            "sedat_proxy_reject_total{{reason=\"{reason}\",stage=\"{stage}\"}} {v}\n"
+        ));
+    }
     out
 }
 
@@ -721,6 +731,10 @@ mod tests {
         assert!(metrics.contains("# TYPE sedat_proxy_deny_total counter"));
         assert!(metrics.contains("sedat_proxy_deny_total{reason=\"rate_limit\"} 0"));
         assert!(metrics.contains("sedat_proxy_deny_total{reason=\"other\"} 0"));
+        assert!(metrics.contains("# TYPE sedat_proxy_reject_total counter"));
+        assert!(metrics.contains(
+            "sedat_proxy_reject_total{reason=\"untrusted_or_disabled\",stage=\"plaintext\"} 0"
+        ));
     }
 
     #[test]
@@ -768,6 +782,46 @@ mod tests {
         );
         assert!(
             after.contains("sedat_proxy_deny_total{reason=\"ip_banned\"} 0"),
+            "{after}"
+        );
+    }
+
+    #[test]
+    fn metrics_expose_proxy_reject_counters() {
+        let state = sample_state();
+        let before = prometheus_text(&state);
+        assert!(
+            before.contains(
+                "sedat_proxy_reject_total{reason=\"malformed\",stage=\"after_tls\"} 0"
+            ),
+            "{before}"
+        );
+
+        state
+            .audit
+            .emit_proxy_reject("127.0.0.1:1", "malformed", "after_tls");
+        state.audit.emit_proxy_reject(
+            "127.0.0.1:2",
+            "untrusted_or_disabled",
+            "plaintext",
+        );
+        state.audit.emit_proxy_reject(
+            "127.0.0.1:3",
+            "untrusted_or_disabled",
+            "plaintext",
+        );
+
+        let after = prometheus_text(&state);
+        assert!(
+            after.contains(
+                "sedat_proxy_reject_total{reason=\"malformed\",stage=\"after_tls\"} 1"
+            ),
+            "{after}"
+        );
+        assert!(
+            after.contains(
+                "sedat_proxy_reject_total{reason=\"untrusted_or_disabled\",stage=\"plaintext\"} 2"
+            ),
             "{after}"
         );
     }
