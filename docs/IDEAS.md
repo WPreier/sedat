@@ -57,7 +57,7 @@ Durable list of follow-ups after **P10–P17**. Active promotion:
 | Split health vs ready on restart_required | Liveness always OK; readiness fails on boot drift | **done P17.1** |
 | Prometheus proxy_deny counters | Scrapeable HTTP-path denial counters (T4/T6/T13) | **done P17.2** |
 | Prometheus proxy_reject counters | Pre-HTTP PROXY reject counters (T1/T12) | **done P17.3** |
-| Prometheus rate_limit / ban hit counters | Flood visibility | **→ P17.4** |
+| Prometheus rate_limit / ban hit counters | Flood visibility | **done P17.4** |
 | Selftest Landlock/seccomp mode detail | Operator clarity for T10 sandbox | **→ P17.5** |
 
 ### Proxy / upstream / request-id

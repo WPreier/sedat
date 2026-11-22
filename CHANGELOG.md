@@ -5,6 +5,14 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.41] – 2026-11-22
+
+### Added
+
+- **P17.4 Prometheus rate/ban counters:** expose `sedat_rate_limited_total` and
+  `sedat_ban_hits_total` for T13 flood visibility. Phase note
+  [docs/phases/P17_04_rate_ban_counters.md](docs/phases/P17_04_rate_ban_counters.md).
+
 ## [0.1.40] – 2026-11-22
 
 ### Added

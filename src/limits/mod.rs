@@ -7,7 +7,7 @@ pub use ban_share::{
 };
 
 use std::net::IpAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -26,6 +26,10 @@ pub struct Limiter {
     ips: DashMap<IpAddr, Mutex<IpLimitState>>,
     /// Optional file-backed replica ban share (P12.6); swapped on reload (P14.6).
     share: Mutex<Option<Arc<BanShareStore>>>,
+    /// Requests denied by token-bucket rate limit (P17.4).
+    rate_limited_total: AtomicU64,
+    /// Requests denied while under (or newly entering) a temporary IP ban (P17.4).
+    ban_hits_total: AtomicU64,
 }
 
 /// Result of attempting to hot-swap the ban-share store on reload.
@@ -139,6 +143,8 @@ impl Limiter {
             active: AtomicUsize::new(0),
             ips: DashMap::new(),
             share: Mutex::new(share),
+            rate_limited_total: AtomicU64::new(0),
+            ban_hits_total: AtomicU64::new(0),
         })
     }
 
@@ -213,6 +219,18 @@ impl Limiter {
         self.active.load(Ordering::Relaxed)
     }
 
+    /// Cumulative rate-limit denials (Prometheus `sedat_rate_limited_total`).
+    #[must_use]
+    pub fn rate_limited_total(&self) -> u64 {
+        self.rate_limited_total.load(Ordering::Relaxed)
+    }
+
+    /// Cumulative ban-path denials (Prometheus `sedat_ban_hits_total`).
+    #[must_use]
+    pub fn ban_hits_total(&self) -> u64 {
+        self.ban_hits_total.load(Ordering::Relaxed)
+    }
+
     /// Rate-limit + temporary ban check for `ip`.
     ///
     /// `limits` is taken from the live config (reload-friendly). When
@@ -266,6 +284,7 @@ impl Limiter {
                         });
                     }
                 }
+                self.ban_hits_total.fetch_add(1, Ordering::Relaxed);
                 return RateCheck {
                     outcome: RateOutcome::Banned,
                     lifecycle: extend_life,
@@ -291,6 +310,7 @@ impl Limiter {
             st.strikes = 0;
             drop(st);
             self.publish_ban_share(ip, new_until);
+            self.ban_hits_total.fetch_add(1, Ordering::Relaxed);
             return RateCheck {
                 outcome: RateOutcome::Banned,
                 lifecycle: Some(BanLifecycle::Applied {
@@ -300,6 +320,7 @@ impl Limiter {
             };
         }
 
+        self.rate_limited_total.fetch_add(1, Ordering::Relaxed);
         RateCheck {
             outcome: RateOutcome::RateLimited,
             lifecycle,
@@ -643,6 +664,27 @@ mod tests {
         let note = lim.reconfigure(LimitsConfig::default());
         assert_eq!(note, BanShareReloadNote::Disabled);
         assert!(!lim.ban_share_enabled());
+    }
+
+    #[test]
+    fn rate_and_ban_hit_counters() {
+        let cfg = LimitsConfig {
+            rate_limit_per_ip: 1,
+            rate_limit_burst: 1,
+            ban_after_rate_limit_strikes: 2,
+            ban_duration_secs: 60,
+            ..Default::default()
+        };
+        let lim = Limiter::new(cfg.clone());
+        let ip: IpAddr = "198.51.100.9".parse().unwrap();
+        assert_eq!(lim.rate_limited_total(), 0);
+        assert_eq!(lim.ban_hits_total(), 0);
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Allow);
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::RateLimited);
+        assert_eq!(lim.rate_limited_total(), 1);
+        assert_eq!(lim.check_rate(ip, &cfg).outcome, RateOutcome::Banned);
+        assert_eq!(lim.ban_hits_total(), 1);
+        assert_eq!(lim.rate_limited_total(), 1);
     }
 
     #[test]

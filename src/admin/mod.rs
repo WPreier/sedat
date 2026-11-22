@@ -617,7 +617,13 @@ pub fn prometheus_text(state: &AdminState) -> String {
          sedat_uptime_seconds {}\n\
          # HELP sedat_bans_active Active temporary IP bans.\n\
          # TYPE sedat_bans_active gauge\n\
-         sedat_bans_active {}\n",
+         sedat_bans_active {}\n\
+         # HELP sedat_rate_limited_total Requests denied by token-bucket rate limit.\n\
+         # TYPE sedat_rate_limited_total counter\n\
+         sedat_rate_limited_total {}\n\
+         # HELP sedat_ban_hits_total Requests denied under temporary IP ban.\n\
+         # TYPE sedat_ban_hits_total counter\n\
+         sedat_ban_hits_total {}\n",
         crate::VERSION,
         state.limiter.active_connections(),
         cfg.schema_version,
@@ -626,6 +632,8 @@ pub fn prometheus_text(state: &AdminState) -> String {
         state.audit.dropped(),
         state.started_at.elapsed().as_secs(),
         state.limiter.bans_active(),
+        state.limiter.rate_limited_total(),
+        state.limiter.ban_hits_total(),
     );
     // P16.1: fixed-cardinality restart-only drift (same keys as P15.3 selftest/status).
     out.push_str(
@@ -728,6 +736,10 @@ mod tests {
         assert!(metrics.contains("sedat_uptime_seconds "));
         assert!(metrics.contains("# TYPE sedat_bans_active gauge"));
         assert!(metrics.contains("sedat_bans_active 0"));
+        assert!(metrics.contains("# TYPE sedat_rate_limited_total counter"));
+        assert!(metrics.contains("sedat_rate_limited_total 0"));
+        assert!(metrics.contains("# TYPE sedat_ban_hits_total counter"));
+        assert!(metrics.contains("sedat_ban_hits_total 0"));
         assert!(metrics.contains("# TYPE sedat_proxy_deny_total counter"));
         assert!(metrics.contains("sedat_proxy_deny_total{reason=\"rate_limit\"} 0"));
         assert!(metrics.contains("sedat_proxy_deny_total{reason=\"other\"} 0"));
@@ -784,6 +796,44 @@ mod tests {
             after.contains("sedat_proxy_deny_total{reason=\"ip_banned\"} 0"),
             "{after}"
         );
+    }
+
+    #[test]
+    fn metrics_expose_rate_and_ban_hit_counters() {
+        use crate::config::LimitsConfig;
+        use crate::limits::RateOutcome;
+        use std::net::IpAddr;
+
+        let limits = LimitsConfig {
+            rate_limit_per_ip: 1,
+            rate_limit_burst: 1,
+            ban_after_rate_limit_strikes: 2,
+            ban_duration_secs: 120,
+            ..Default::default()
+        };
+        let lim = Limiter::new(limits.clone());
+        let mut state = sample_state();
+        state.limiter = lim.clone();
+
+        let before = prometheus_text(&state);
+        assert!(before.contains("sedat_rate_limited_total 0"), "{before}");
+        assert!(before.contains("sedat_ban_hits_total 0"), "{before}");
+
+        let ip: IpAddr = "203.0.113.88".parse().unwrap();
+        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Allow);
+        assert_eq!(
+            lim.check_rate(ip, &limits).outcome,
+            RateOutcome::RateLimited
+        );
+        assert_eq!(lim.rate_limited_total(), 1);
+        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Banned);
+        assert_eq!(lim.ban_hits_total(), 1);
+        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Banned);
+        assert_eq!(lim.ban_hits_total(), 2);
+
+        let after = prometheus_text(&state);
+        assert!(after.contains("sedat_rate_limited_total 1"), "{after}");
+        assert!(after.contains("sedat_ban_hits_total 2"), "{after}");
     }
 
     #[test]

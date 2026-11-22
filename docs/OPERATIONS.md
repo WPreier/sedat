@@ -177,6 +177,7 @@ echo selftest| socat - UNIX-CONNECT:/run/sedat/admin.sock
 - Includes `sedat_uptime_seconds` and `sedat_bans_active` (P16.3).
 - Includes `sedat_proxy_deny_total{reason="…"}` (P17.2) for HTTP-path security denials.
 - Includes `sedat_proxy_reject_total{reason,stage}` (P17.3) for pre-HTTP PROXY rejects.
+- Includes `sedat_rate_limited_total` / `sedat_ban_hits_total` (P17.4) for flood visibility.
 - Script: `scripts/prometheus_admin_scrape.sh [admin.sock]` (Unix socket; uses `AUTH`).
 - No built-in public HTTP `/metrics` or `/health` control endpoint.
 
