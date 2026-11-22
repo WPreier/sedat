@@ -10,7 +10,7 @@ commit + push/PR, wait for review.
 ## Suggested order
 
 ```text
-P16.1 Prometheus restart_required gauge   ← next
+P16.1 Prometheus restart_required gauge   ← done (v0.1.35)
 … later: remaining ops/hardening …
 ```
 
@@ -20,12 +20,13 @@ P16.1 Prometheus restart_required gauge   ← next
 
 | | |
 |--|--|
-| **Status** | **planned** |
-| **Behavior** | Expose `sedat_restart_required{key="…"}` (or a single gauge + labeled keys) from the same boot-vs-live snapshot as P15.3, so scrapers/alerts catch restart-only drift without parsing admin text |
+| **Status** | **done** (v0.1.35) |
+| **Behavior** | Expose `sedat_restart_required{key="…"}` (0/1) for all boot-bound keys from the P15.3 snapshot |
+| **Phase note** | [phases/P16_01_restart_required_gauge.md](phases/P16_01_restart_required_gauge.md) |
 | **Depends on** | P15.3 (v0.1.34) |
 
 ## Status board
 
 | Step | Item | Status |
 |------|------|--------|
-| 1 | Prometheus restart_required gauge | planned |
+| 1 | Prometheus restart_required gauge | **done** (v0.1.35) |

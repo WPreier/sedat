@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.35] – 2026-11-22
+
+### Added
+
+- **P16.1 Prometheus restart_required gauges:** expose
+  `sedat_restart_required{key="…"}` (0/1) for all boot-bound keys from the P15.3
+  snapshot so scrapers/alerts need not parse admin text. Phase note
+  [docs/phases/P16_01_restart_required_gauge.md](docs/phases/P16_01_restart_required_gauge.md).
+
 ## [0.1.34] – 2026-11-22
 
 ### Added

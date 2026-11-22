@@ -171,6 +171,8 @@ echo selftest| socat - UNIX-CONNECT:/run/sedat/admin.sock
   With admin token configured: `Authorization: Bearer …` required (P12.1); see
   [phases/P12_01_metrics_sidecar_token.md](phases/P12_01_metrics_sidecar_token.md).
 - Includes `sedat_audit_dropped_total` (P11.4) for JSONL audit drops.
+- Includes `sedat_restart_required{key="…"}` gauges (P16.1) — `1` when live config
+  drifts from boot for that restart-only knob (listen/sandbox/metrics/ACME-cold).
 - Script: `scripts/prometheus_admin_scrape.sh [admin.sock]` (Unix socket; uses `AUTH`).
 - No built-in public HTTP `/metrics` or `/health` control endpoint.
 

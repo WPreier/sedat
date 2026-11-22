@@ -391,6 +391,20 @@ impl RestartOnlySnapshot {
     }
 }
 
+/// Stable Prometheus label set for restart-only knobs (P16.1).
+///
+/// Always emitted as `sedat_restart_required{key="…"}` so scrapers see a fixed
+/// series cardinality (0 = applied / matching boot, 1 = restart still required).
+pub const RESTART_ONLY_KEYS: &[&str] = &[
+    "server.listen",
+    "server.listen_tls",
+    "server.http_redirect_listen",
+    "server.metrics_listen",
+    "hardening.landlock",
+    "hardening.seccomp",
+    "acme.enable",
+];
+
 /// Keys that changed vs boot and still need a process restart to take effect.
 #[must_use]
 pub fn restart_required_keys(boot: &RestartOnlySnapshot, cfg: &SedatConfig) -> Vec<&'static str> {
@@ -418,6 +432,19 @@ pub fn restart_required_keys(boot: &RestartOnlySnapshot, cfg: &SedatConfig) -> V
         keys.push("acme.enable");
     }
     keys
+}
+
+/// Per-key 0/1 values for Prometheus (`1` = restart required for that key).
+#[must_use]
+pub fn restart_required_gauges(
+    boot: &RestartOnlySnapshot,
+    cfg: &SedatConfig,
+) -> Vec<(&'static str, u8)> {
+    let drift = restart_required_keys(boot, cfg);
+    RESTART_ONLY_KEYS
+        .iter()
+        .map(|&key| (key, u8::from(drift.contains(&key))))
+        .collect()
 }
 
 /// Compact suffix for admin reload/status replies (` restart_required=a,b` or empty).
@@ -481,5 +508,28 @@ mod tests {
         let mut b = a.clone();
         b.acme.enabled = true;
         assert!(!restart_required_keys(&boot, &b).contains(&"acme.enable"));
+    }
+
+    #[test]
+    fn restart_required_gauges_fixed_cardinality() {
+        let a = parse_toml(crate::DEFAULT_CONFIG_TOML).unwrap();
+        let boot = RestartOnlySnapshot::from_boot(&a, false);
+        let gauges = restart_required_gauges(&boot, &a);
+        assert_eq!(gauges.len(), RESTART_ONLY_KEYS.len());
+        assert!(gauges.iter().all(|(_, v)| *v == 0));
+
+        let mut b = a.clone();
+        b.server.listen = "127.0.0.1:18080".into();
+        let gauges = restart_required_gauges(&boot, &b);
+        assert_eq!(gauges.len(), RESTART_ONLY_KEYS.len());
+        let listen = gauges
+            .iter()
+            .find(|(k, _)| *k == "server.listen")
+            .unwrap();
+        assert_eq!(listen.1, 1);
+        assert!(gauges
+            .iter()
+            .filter(|(k, _)| *k != "server.listen")
+            .all(|(_, v)| *v == 0));
     }
 }
