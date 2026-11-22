@@ -16,6 +16,7 @@ P17.2 Prometheus proxy_deny counters      ← done (v0.1.39)
 P17.3 Prometheus proxy_reject counters    ← done (v0.1.40)
 P17.4 Prometheus rate_limit / ban hit counters ← done (v0.1.41)
 P17.5 Selftest reports Landlock/seccomp mode ← done (v0.1.42)
+P17.6 Install / Update / example config docs ← done (v0.1.43)
 ```
 
 ## Step breakdown
@@ -60,6 +61,14 @@ P17.5 Selftest reports Landlock/seccomp mode ← done (v0.1.42)
 | **Behavior** | Selftest checks `hardening_landlock` / `hardening_seccomp` (PASS with mode detail; FAIL on invalid enum) |
 | **Phase note** | [phases/P17_05_selftest_sandbox_modes.md](phases/P17_05_selftest_sandbox_modes.md) |
 
+### P17.6 – Install / Update / example config docs
+
+| | |
+|--|--|
+| **Status** | **done** (v0.1.43) |
+| **Behavior** | Docs-only: INSTALL + UPDATE guides, annotated `full.example.toml`, cross-links |
+| **Phase note** | [phases/P17_06_docs_guides.md](phases/P17_06_docs_guides.md) |
+
 ## Status board
 
 | Step | Item | Status |
@@ -69,3 +78,4 @@ P17.5 Selftest reports Landlock/seccomp mode ← done (v0.1.42)
 | 3 | Prometheus proxy_reject counters | **done** (v0.1.40) |
 | 4 | Prometheus rate_limit / ban hit counters | **done** (v0.1.41) |
 | 5 | Selftest Landlock/seccomp mode | **done** (v0.1.42) |
+| 6 | Install / Update / example config docs | **done** (v0.1.43) |

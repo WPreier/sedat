@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.43] – 2026-11-22
+
+### Added
+
+- **Docs guides:** detailed [INSTALL.md](docs/INSTALL.md) and
+  [UPDATE.md](docs/UPDATE.md); annotated
+  [examples/config/full.example.toml](examples/config/full.example.toml);
+  README / CONFIG / OPERATIONS / DEV_SETUP cross-links. Phase note
+  [docs/phases/P17_06_docs_guides.md](docs/phases/P17_06_docs_guides.md).
+
 ## [0.1.42] – 2026-11-22
 
 ### Added

@@ -8,7 +8,8 @@
 | WSL2 + Docker | Development & CI parity |
 | Windows native | Build/test best-effort; **no** privilege-drop / systemd / Landlock |
 
-See [DEV_SETUP.md](DEV_SETUP.md).
+See [DEV_SETUP.md](DEV_SETUP.md). Neuinstallation: [INSTALL.md](INSTALL.md).
+Updates / Rollback: [UPDATE.md](UPDATE.md). Config-Referenz: [CONFIG.md](CONFIG.md).
 
 ## Quick start (dev)
 
@@ -299,7 +300,8 @@ ban_extend_min_interval_secs = 1   # audit throttle; TTL still refreshes every h
 - Allow TCP 80/443 (and UDP 443 if HTTP/3 enabled).
 - Block direct access to Seda from the internet.
 - Do not expose admin socket or metrics sidecar beyond loopback / admin group.
+- Install checklist: [INSTALL.md](INSTALL.md) „Firewall / Listener“.
 
 ## Release notes
 
-Version via Cargo/`--version`. Optional SBOM via `cargo cyclonedx` (documented in Phase 8). Checklist: [phases/P08_e2e_release.md](phases/P08_e2e_release.md). P09: [ROADMAP_P09.md](ROADMAP_P09.md). P10: [ROADMAP_P10.md](ROADMAP_P10.md). P11: [ROADMAP_P11.md](ROADMAP_P11.md). P12: [ROADMAP_P12.md](ROADMAP_P12.md).
+Version via Cargo/`--version`. Update-Pfad: [UPDATE.md](UPDATE.md). Optional SBOM via `cargo cyclonedx` (documented in Phase 8). Checklist: [phases/P08_e2e_release.md](phases/P08_e2e_release.md). P09: [ROADMAP_P09.md](ROADMAP_P09.md). P10: [ROADMAP_P10.md](ROADMAP_P10.md). P11: [ROADMAP_P11.md](ROADMAP_P11.md). P12: [ROADMAP_P12.md](ROADMAP_P12.md).

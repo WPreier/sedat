@@ -187,4 +187,11 @@ gate without reloading routes/certs. Prefer this when rotating secrets. Full
 
 ## Examples
 
-See `examples/config/good.toml` and `examples/config/bad_line_12.toml`.
+| Datei | Zweck |
+|-------|--------|
+| [`examples/config/good.toml`](../examples/config/good.toml) | Minimales gültiges Dev-Beispiel |
+| [`examples/config/full.example.toml`](../examples/config/full.example.toml) | Kommentiertes Vollbeispiel (alle Sektionen) |
+| [`examples/config/bad_line_12.toml`](../examples/config/bad_line_12.toml) | Absichtlich ungültig (Zeilenfehler) |
+| [`examples/config/README.md`](../examples/config/README.md) | Index der Config-Beispiele |
+
+Verwandt: [INSTALL.md](INSTALL.md) · [UPDATE.md](UPDATE.md) · [OPERATIONS.md](OPERATIONS.md).

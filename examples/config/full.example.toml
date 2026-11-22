@@ -1,0 +1,149 @@
+# SeDat – kommentiertes Vollbeispiel (schema_version = 1)
+#
+# Zweck: Referenz aller relevanten Sektionen. Nicht 1:1 für Produktion
+# kopieren — Secrets über Env/Datei, Domains/Listen anpassen.
+#
+# Validieren:
+#   sedat --config examples/config/full.example.toml --validate
+#
+# Kurzbeispiel ohne Kommentare: examples/config/good.toml
+# Doku: docs/CONFIG.md · docs/INSTALL.md · docs/UPDATE.md
+
+schema_version = 1
+
+# ─── Prozess / Listen / Admin ───────────────────────────────────────────────
+[server]
+# Produktions-Skizze: alle Interfaces; Dev oft 127.0.0.1
+listen = "0.0.0.0:80"
+listen_tls = "0.0.0.0:443"
+http_redirect_listen = "0.0.0.0:8081"
+# Privilege-Drop nach Bind (Linux; Unit startet als root / CAP_NET_BIND_SERVICE)
+user = "sedat"
+group = "sedat"
+state_dir = "/var/lib/sedat"
+admin_socket = "/run/sedat/admin.sock"
+# Optional: Socket 0660 + Gruppen-ACL statt 0600
+# admin_group = "sedat-admin"
+# Token: leer = nur FS-ACL. Prefer Env SEDAT_ADMIN_TOKEN oder Datei.
+admin_token = ""
+admin_token_file = "/var/lib/sedat/admin.token"
+# Nach reload-token: altes Token noch N Sekunden gültig (0 = harter Cut)
+admin_token_overlap_secs = 300
+# Prometheus nur Loopback; mit Token → Authorization: Bearer …
+metrics_listen = "127.0.0.1:9090"
+
+# ─── Statisches TLS (wenn ACME aus) ─────────────────────────────────────────
+[tls]
+enabled = false
+# cert_path = "/etc/sedat/tls/fullchain.pem"
+# key_path  = "/etc/sedat/tls/privkey.pem"
+
+# ─── ACME DNS-01 ────────────────────────────────────────────────────────────
+# Tipp: zuerst directory = "staging" (Let's Encrypt Staging), dann production.
+# Enable-from-cold braucht Prozess-Restart (Reload reicht nicht).
+[acme]
+enabled = false
+directory = "staging"   # staging | production | pebble | URL
+email = "admin@example.com"
+domains = ["example.com", "www.example.com"]
+# Provider: file | cloudflare | webhook
+dns_provider = "file"
+dns_file = "/var/lib/sedat/acme-dns-challenge.txt"
+# --- Alternativen (jeweils nur eine Provider-Variante aktiv nutzen) ---
+# dns_provider = "cloudflare"
+# cloudflare_api_token = ""          # besser: SEDAT_CLOUDFLARE_API_TOKEN
+# cloudflare_zone_id = ""            # optional; sonst Zone-Lookup per Name
+# dns_provider = "webhook"
+# dns_webhook_url = "https://hooks.example.com/dns01"
+# dns_webhook_bearer = ""            # besser: SEDAT_DNS_WEBHOOK_BEARER
+ari = true                 # RFC 9773 renewalInfo wenn CA es anbietet
+renew_days_before = 30     # Fallback ohne ARI (1..=90)
+
+# ─── Virtual Hosts / Upstream ───────────────────────────────────────────────
+[[routes.hosts]]
+host = "example.com"
+[[routes.hosts.paths]]
+prefix = "/"
+# Empfohlen zu Seda: plaintext http:// im privaten Netz
+upstream = "http://127.0.0.1:9080"
+# Optional: Peer-Pin (IP/CIDR/Hostname); leer = kein Pin
+upstream_allowlist = ["127.0.0.1", "10.0.0.0/8"]
+upstream_dns_refresh_secs = 60
+# Optional Upstream-mTLS (nur mit https:// Upstream; cert+key beide oder keines)
+# upstream = "https://backend.internal:9443"
+# upstream_mtls_cert = "/etc/sedat/mtls/client.crt"
+# upstream_mtls_key  = "/etc/sedat/mtls/client.key"
+# upstream_mtls_ca   = "/etc/sedat/mtls/upstream-ca.crt"
+
+[[routes.hosts]]
+host = "api.example.com"
+[[routes.hosts.paths]]
+prefix = "/v1"
+upstream = "http://10.0.0.20:8080"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://10.0.0.21:8080"
+
+# ─── PROXY Protocol ─────────────────────────────────────────────────────────
+[proxy_protocol]
+# Zum Upstream (Seda): off | v1 | v2
+outbound = "v2"
+inbound_enabled = false
+inbound_allowlist = []
+# before_tls | after_tls (PP2 über TLS)
+inbound_placement = "before_tls"
+# Beispiel inbound (LB → SeDat):
+# inbound_enabled = true
+# inbound_allowlist = ["10.0.0.0/8", "192.168.0.0/16"]
+
+# ─── Edge-Limits / Bans / Ban-Share ─────────────────────────────────────────
+[limits]
+max_connections = 1024
+max_header_bytes = 16384
+max_headers = 100
+max_body_bytes = 1048576
+request_timeout_secs = 30
+idle_timeout_secs = 60
+rate_limit_per_ip = 100
+rate_limit_burst = 20
+# Nach N Rate-Limit-Treffern in Folge → Temp-Ban (0 = aus)
+ban_after_rate_limit_strikes = 20
+ban_duration_secs = 60
+ban_extend_while_banned = true
+ban_extend_min_interval_secs = 1
+# Replica Ban-Share (leer = aus). Secret Pflicht wenn Path gesetzt.
+# ban_share_path = "/var/lib/sedat/shared_bans.json"
+# ban_share_secret = ""                         # besser Env/Datei
+# ban_share_secret_file = "/var/lib/sedat/ban_share.secret"
+# ban_share_poll_secs = 2
+# Nur relevant mit Feature http3 + experimental.h3
+max_h3_connections = 512
+max_h3_streams = 100
+
+# ─── Eingebettete Docs ──────────────────────────────────────────────────────
+[embedded_docs]
+enabled = true
+sedat_path = "/sedat"
+seda_path = "/seda"
+
+# ─── Experimentell ──────────────────────────────────────────────────────────
+[experimental]
+# HTTP/3 UDP :443 — Binary muss mit --features http3 gebaut sein
+h3 = false
+
+# ─── Linux-Sandbox (nach Privilege-Drop) ────────────────────────────────────
+# Änderung = Restart erforderlich (nicht nur Reload)
+[hardening]
+landlock = "auto"   # auto | off | required
+seccomp = "auto"    # auto | off | required
+
+# ─── Logging / Audit ────────────────────────────────────────────────────────
+[logging]
+level = "info"
+request_id = true
+request_id_header = "x-request-id"
+# JSONL-Audit; leer = aus. Prefer unter state_dir
+audit_jsonl = "/var/lib/sedat/audit.jsonl"
+audit_jsonl_max_bytes = 10485760
+# Alters-Rotation zusätzlich zur Größe (0 = aus); z. B. 86400 = ~täglich
+audit_jsonl_max_age_secs = 86400
