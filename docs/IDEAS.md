@@ -40,7 +40,7 @@ Durable list of follow-ups after **P10–P15**. Active promotion:
 | PROXY-Rejects (pre-HTTP) as JSONL event | JSONL `proxy_reject` with reason/stage | **done P11.3** |
 | Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | **done P12.4** |
 | Stabilize Pebble ACME CI job | ENTRYPOINT + UA + pin (P15.1); instant-acme 0.8 optional token + unpin (P15.2) | **done P15.2** |
-| Prometheus gauge for restart-only drift | Scrapeable `sedat_restart_required` from P15.3 snapshot | **→ P16.1** |
+| Prometheus gauge for restart-only drift | Scrapeable `sedat_restart_required{key=…}` from P15.3 snapshot | **done P16.1** |
 
 ### Admin / auth / selftest
 

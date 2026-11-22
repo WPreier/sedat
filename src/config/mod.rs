@@ -6,8 +6,8 @@ mod schema;
 mod validate;
 
 pub use diff::{
-    format_audit_summary, format_restart_required_note, restart_required_keys, security_diff,
-    RestartOnlySnapshot, SecurityChange,
+    format_audit_summary, format_restart_required_note, restart_required_gauges,
+    restart_required_keys, security_diff, RestartOnlySnapshot, SecurityChange, RESTART_ONLY_KEYS,
 };
 pub use migrate::{migrate_toml, migration_path, peek_schema_version, upgrade_notes};
 pub use schema::*;

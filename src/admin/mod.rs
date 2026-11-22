@@ -22,8 +22,8 @@ use tracing::{info, warn};
 use crate::acme::AcmeStatus;
 use crate::audit::AuditSink;
 use crate::config::{
-    self, format_audit_summary, format_restart_required_note, restart_required_keys, security_diff,
-    SedatConfig,
+    self, format_audit_summary, format_restart_required_note, restart_required_gauges,
+    restart_required_keys, security_diff, SedatConfig,
 };
 use crate::limits::Limiter;
 use crate::tls::TlsState;
@@ -571,7 +571,7 @@ fn format_status(state: &AdminState) -> String {
 /// Prometheus text exposition (no `OK` prefix — for sidecar `/metrics`).
 pub fn prometheus_text(state: &AdminState) -> String {
     let cfg = state.config.load();
-    format!(
+    let mut out = format!(
         "# HELP sedat_info SeDat build info.\n\
          # TYPE sedat_info gauge\n\
          sedat_info{{version=\"{}\"}} 1\n\
@@ -596,7 +596,16 @@ pub fn prometheus_text(state: &AdminState) -> String {
         u8::from(cfg.proxy_protocol.inbound_enabled),
         u8::from(cfg.proxy_protocol.inbound_placement == "after_tls"),
         state.audit.dropped(),
-    )
+    );
+    // P16.1: fixed-cardinality restart-only drift (same keys as P15.3 selftest/status).
+    out.push_str(
+        "# HELP sedat_restart_required Restart required for this boot-bound config key (1=yes).\n\
+         # TYPE sedat_restart_required gauge\n",
+    );
+    for (key, v) in restart_required_gauges(&state.boot, &cfg) {
+        out.push_str(&format!("sedat_restart_required{{key=\"{key}\"}} {v}\n"));
+    }
+    out
 }
 
 fn format_cert(state: &AdminState) -> String {
@@ -664,6 +673,9 @@ mod tests {
         assert!(metrics.contains("# TYPE sedat_info gauge"));
         assert!(metrics.contains("# TYPE sedat_audit_dropped_total counter"));
         assert!(metrics.contains("sedat_audit_dropped_total 0"));
+        assert!(metrics.contains("# TYPE sedat_restart_required gauge"));
+        assert!(metrics.contains("sedat_restart_required{key=\"server.listen\"} 0"));
+        assert!(metrics.contains("sedat_restart_required{key=\"acme.enable\"} 0"));
     }
 
     #[test]
@@ -677,6 +689,38 @@ mod tests {
         assert!(status.contains("restart_required="), "{status}");
         assert!(status.contains("server.listen"), "{status}");
         assert!(status.contains("hardening.landlock"), "{status}");
+    }
+
+    #[test]
+    fn metrics_expose_restart_required_gauges() {
+        let state = sample_state();
+        let before = prometheus_text(&state);
+        assert!(
+            before.contains("sedat_restart_required{key=\"server.listen\"} 0"),
+            "{before}"
+        );
+        assert!(
+            before.contains("sedat_restart_required{key=\"hardening.seccomp\"} 0"),
+            "{before}"
+        );
+
+        let mut cfg = (*state.config.load_full()).clone();
+        cfg.server.metrics_listen = Some("127.0.0.1:19100".into());
+        cfg.hardening.seccomp = "required".into();
+        state.config.store(Arc::new(cfg));
+        let after = prometheus_text(&state);
+        assert!(
+            after.contains("sedat_restart_required{key=\"server.metrics_listen\"} 1"),
+            "{after}"
+        );
+        assert!(
+            after.contains("sedat_restart_required{key=\"hardening.seccomp\"} 1"),
+            "{after}"
+        );
+        assert!(
+            after.contains("sedat_restart_required{key=\"server.listen\"} 0"),
+            "{after}"
+        );
     }
 
     #[test]
