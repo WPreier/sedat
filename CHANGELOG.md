@@ -5,6 +5,14 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.36] – 2026-11-22
+
+### Added
+
+- **P16.2 config_reload restart_required:** JSONL `config_reload` events include
+  `restart_required: […]` (boot-bound keys still needing process restart). Phase note
+  [docs/phases/P16_02_reload_restart_required_audit.md](docs/phases/P16_02_reload_restart_required_audit.md).
+
 ## [0.1.35] – 2026-11-22
 
 ### Added

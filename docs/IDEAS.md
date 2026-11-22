@@ -12,7 +12,7 @@ See [ROADMAP_P09.md](ROADMAP_P09.md) and [ROADMAP_P10.md](ROADMAP_P10.md). Highl
 
 ## Deferred / Open backlog
 
-Durable list of follow-ups after **P10–P15**. Active promotion:
+Durable list of follow-ups after **P10–P16**. Active promotion:
 [ROADMAP_P16.md](ROADMAP_P16.md) (P15 complete: [ROADMAP_P15.md](ROADMAP_P15.md)).
 
 ### Explicitly deferred / declined
@@ -41,6 +41,8 @@ Durable list of follow-ups after **P10–P15**. Active promotion:
 | Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | **done P12.4** |
 | Stabilize Pebble ACME CI job | ENTRYPOINT + UA + pin (P15.1); instant-acme 0.8 optional token + unpin (P15.2) | **done P15.2** |
 | Prometheus gauge for restart-only drift | Scrapeable `sedat_restart_required{key=…}` from P15.3 snapshot | **done P16.1** |
+| `restart_required` on config_reload JSONL | SIEM field on successful reload when boot-bound knobs drift | **done P16.2** |
+| Prometheus uptime + bans_active gauges | `sedat_uptime_seconds` / `sedat_bans_active` for dashboards | **→ P16.3** |
 
 ### Admin / auth / selftest
 

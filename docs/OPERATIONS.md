@@ -217,7 +217,8 @@ audit_jsonl_max_bytes = 10485760   # size; 0 = off
 audit_jsonl_max_age_secs = 86400   # optional daily age rotate; 0 = off (default)
 ```
 
-Events (one JSON object per line): `startup`, `config_reload` (security-diff), `proxy_deny`
+Events (one JSON object per line): `startup`, `config_reload` (security-diff +
+`restart_required` key list, P16.2), `proxy_deny`
 (with `request_id` when available), `proxy_reject` (inbound PROXY policy fail, pre-HTTP),
 `ip_ban` / `ip_ban_extend` / `ip_unban`, `admin_unban`, `admin_token_reload`. Contended writes are dropped
 (non-blocking; count as `sedat_audit_dropped_total`). See

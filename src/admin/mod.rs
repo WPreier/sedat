@@ -426,7 +426,9 @@ pub fn apply_live_reload(state: &AdminState) -> String {
                 );
             }
             let restart_note = format_restart_required_note(&restart_keys);
-            state.audit.emit_config_reload(&changes, &summary);
+            state
+                .audit
+                .emit_config_reload(&changes, &summary, &restart_keys);
             state.config.store(Arc::new(active.config));
             format!(
                 "OK reload audit={summary}{token_note}{cert_note}{ban_note}{acme_note}{restart_note}\n"
@@ -1025,6 +1027,70 @@ upstream = "http://127.0.0.1:9"
         assert_eq!(state.config.load().limits.max_connections, 64);
         // Acceptor still builds after swap (material replaced).
         let _ = tls_state.acceptor();
+    }
+
+    #[test]
+    fn reload_audit_includes_restart_required_keys() {
+        let dir = tempfile::tempdir().unwrap();
+        let state_dir = dir.path().join("state");
+        std::fs::create_dir_all(&state_dir).unwrap();
+        let user = dir.path().join("sedat.toml");
+        let audit_path = dir.path().join("audit.jsonl");
+        let audit = AuditSink::open(audit_path.to_str().unwrap(), 0, 0).unwrap();
+
+        let toml_v1 = format!(
+            r#"
+schema_version = 1
+[server]
+listen = "127.0.0.1:18080"
+listen_tls = "127.0.0.1:0"
+state_dir = "{state}"
+[logging]
+audit_jsonl = "{audit}"
+[limits]
+max_connections = 16
+[[routes.hosts]]
+host = "localhost"
+[[routes.hosts.paths]]
+prefix = "/"
+upstream = "http://127.0.0.1:9"
+"#,
+            state = state_dir.display().to_string().replace('\\', "/"),
+            audit = audit_path.display().to_string().replace('\\', "/"),
+        );
+        std::fs::write(&user, &toml_v1).unwrap();
+        let active = config::load_and_activate(&user, Some(&state_dir)).unwrap();
+        let boot = RestartOnlySnapshot::from_boot(&active.config, false);
+        let tokens = LiveAdminTokens::from_config(&active.config);
+        let state = AdminState {
+            user_config: user.clone(),
+            state_dir: state_dir.clone(),
+            config: Arc::new(ArcSwap::from_pointee(active.config)),
+            tokens,
+            limiter: Limiter::new(Default::default()),
+            tls: None,
+            acme: None,
+            acme_status: None,
+            audit,
+            started_at: now_start(),
+            boot,
+        };
+
+        let toml_v2 = toml_v1.replace("127.0.0.1:18080", "127.0.0.1:18081");
+        std::fs::write(&user, &toml_v2).unwrap();
+        let reply = apply_live_reload(&state);
+        assert!(reply.starts_with("OK reload"), "{reply}");
+        assert!(reply.contains("restart_required=server.listen"), "{reply}");
+
+        let text = std::fs::read_to_string(&audit_path).unwrap();
+        let line = text
+            .lines()
+            .find(|l| l.contains("\"config_reload\""))
+            .expect("config_reload audit line");
+        assert!(
+            line.contains("\"restart_required\"") && line.contains("server.listen"),
+            "{line}"
+        );
     }
 
     #[test]
