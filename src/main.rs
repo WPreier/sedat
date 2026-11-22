@@ -197,6 +197,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
 
     // Admin socket + optional loopback metrics sidecar + SIGHUP reload (P14.1/P14.6)
     {
+        let acme_started = acme_mgr.is_some();
         let admin_state = AdminState {
             user_config,
             state_dir: PathBuf::from(&cfg.server.state_dir),
@@ -208,6 +209,7 @@ async fn run(cfg: SedatConfig, user_config: PathBuf) -> anyhow::Result<()> {
             acme_status,
             audit,
             started_at: admin::now_start(),
+            boot: admin::RestartOnlySnapshot::from_boot(&cfg, acme_started),
         };
         let sock = PathBuf::from(&cfg.server.admin_socket);
         let admin_for_metrics = admin_state.clone();

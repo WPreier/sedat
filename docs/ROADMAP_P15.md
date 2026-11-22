@@ -11,7 +11,8 @@ commit + push/PR, wait for review.
 ```text
 P15.1 Stabilize Pebble CI        ← done (v0.1.31–0.1.32)
 P15.2 instant-acme 0.8 (token)   ← done (v0.1.33)
-… later: remaining ops/hardening from IDEAS …
+P15.3 Restart-required drift     ← done (v0.1.34)
+… later: [ROADMAP_P16.md](ROADMAP_P16.md) …
 ```
 
 ## Step breakdown
@@ -32,9 +33,18 @@ P15.2 instant-acme 0.8 (token)   ← done (v0.1.33)
 | **Behavior** | Upgrade `instant-acme` so token-less challenges deserialize; unpin Pebble `:latest` |
 | **Phase note** | [phases/P15_02_instant_acme_token.md](phases/P15_02_instant_acme_token.md) |
 
+### P15.3 – Restart-required drift reporting
+
+| | |
+|--|--|
+| **Status** | **done** (v0.1.34) |
+| **Behavior** | Boot `RestartOnlySnapshot`; `status`/`reload` note + selftest fail when listen/sandbox/metrics/ACME-cold drift |
+| **Phase note** | [phases/P15_03_restart_required_drift.md](phases/P15_03_restart_required_drift.md) |
+
 ## Status board
 
 | Step | Item | Status |
 |------|------|--------|
 | 1 | Stabilize Pebble CI | **done** (v0.1.32) |
 | 2 | instant-acme 0.8 (token) | **done** (v0.1.33) |
+| 3 | Restart-required drift | **done** (v0.1.34) |
