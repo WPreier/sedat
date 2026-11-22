@@ -178,7 +178,8 @@ and enabling ACME when it was off at process start (no manager to attach).
 Admin `status` / successful `reload` append ` restart_required=key,…` when the
 live config drifts from the boot snapshot; `selftest` fails check
 `restart_required` until the process is restarted (P15.3). Metrics expose
-`sedat_restart_required{key="…"}` (0/1) for the same keys (P16.1).
+`sedat_restart_required{key="…"}` (0/1) for the same keys (P16.1). JSONL
+`config_reload` includes `restart_required: […]` (P16.2).
 
 **Token-only (P12.3):** admin `reload-token` re-reads token sources into the live
 gate without reloading routes/certs. Prefer this when rotating secrets. Full

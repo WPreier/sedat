@@ -166,7 +166,15 @@ impl AuditSink {
     }
 
     /// Config reload security-diff audit (no request_id).
-    pub fn emit_config_reload(&self, changes: &[SecurityChange], summary: &str) {
+    ///
+    /// `restart_required` lists boot-bound keys that still need a process restart
+    /// after this successful reload (P16.2; empty when none).
+    pub fn emit_config_reload(
+        &self,
+        changes: &[SecurityChange],
+        summary: &str,
+        restart_required: &[&str],
+    ) {
         let changes_json: Vec<Value> = changes
             .iter()
             .map(|c| {
@@ -183,6 +191,7 @@ impl AuditSink {
             "peer": Value::Null,
             "summary": summary,
             "changes": changes_json,
+            "restart_required": restart_required,
         }));
     }
 
@@ -483,12 +492,27 @@ mod tests {
         s.emit_config_reload(
             &changes,
             "proxy_protocol.inbound_enabled: \"false\" → \"true\"",
+            &["server.listen", "hardening.seccomp"],
         );
         let text = fs::read_to_string(&path).unwrap();
         let v: Value = serde_json::from_str(text.lines().next().unwrap()).unwrap();
         assert_eq!(v["event"], "config_reload");
         assert!(v["request_id"].is_null());
         assert_eq!(v["changes"][0]["key"], "proxy_protocol.inbound_enabled");
+        assert_eq!(v["restart_required"][0], "server.listen");
+        assert_eq!(v["restart_required"][1], "hardening.seccomp");
+    }
+
+    #[test]
+    fn config_reload_empty_restart_required() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("audit.jsonl");
+        let s = AuditSink::open(path.to_str().unwrap(), 0, 0).unwrap();
+        s.emit_config_reload(&[], "none", &[]);
+        let text = fs::read_to_string(&path).unwrap();
+        let v: Value = serde_json::from_str(text.lines().next().unwrap()).unwrap();
+        assert_eq!(v["event"], "config_reload");
+        assert_eq!(v["restart_required"], json!([]));
     }
 
     #[test]
