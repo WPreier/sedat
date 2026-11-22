@@ -55,7 +55,8 @@ Durable list of follow-ups after **P10–P17**. Active promotion:
 | Allowlist parseable check in selftest | Validate `upstream_allowlist` / PROXY CIDRs | **done P11.6** |
 | Restart-required drift on status/reload/selftest | Boot snapshot vs live; annotate + fail selftest | **done P15.3** |
 | Split health vs ready on restart_required | Liveness always OK; readiness fails on boot drift | **done P17.1** |
-| Prometheus proxy_deny / proxy_reject counters | Scrapeable abuse counters (T1/T12/T13) | **→ P17.2–P17.3** |
+| Prometheus proxy_deny counters | Scrapeable HTTP-path denial counters (T4/T6/T13) | **done P17.2** |
+| Prometheus proxy_reject counters | Pre-HTTP PROXY reject counters (T1/T12) | **→ P17.3** |
 | Prometheus rate_limit / ban hit counters | Flood visibility | **→ P17.4** |
 | Selftest Landlock/seccomp mode detail | Operator clarity for T10 sandbox | **→ P17.5** |
 

@@ -21,6 +21,30 @@ use tracing::warn;
 
 use crate::config::SecurityChange;
 
+/// Stable Prometheus label set for HTTP-path `proxy_deny` reasons (P17.2).
+///
+/// Always emitted as `sedat_proxy_deny_total{reason="…"}` (fixed cardinality).
+/// Unknown reasons map to `"other"`.
+pub const PROXY_DENY_REASONS: &[&str] = &[
+    "rate_limit",
+    "ip_banned",
+    "smuggling",
+    "header_bomb",
+    "absolute_uri_host_mismatch",
+    "path_traversal",
+    "missing_host",
+    "sni_host_mismatch",
+    "unknown_host_or_path",
+    "body_too_large",
+    "upstream_ip_pin",
+    "upstream_error",
+    "other",
+];
+
+const PROXY_DENY_REASON_COUNT: usize = 13;
+
+const _: () = assert!(PROXY_DENY_REASONS.len() == PROXY_DENY_REASON_COUNT);
+
 /// Shared audit sink (cheap to clone).
 #[derive(Clone, Debug)]
 pub struct AuditSink {
@@ -31,6 +55,15 @@ pub struct AuditSink {
 struct Inner {
     state: Mutex<SinkState>,
     dropped: AtomicU64,
+    /// Per-reason HTTP-path security denial counts (even when JSONL is disabled).
+    proxy_deny: [AtomicU64; PROXY_DENY_REASON_COUNT],
+}
+
+fn proxy_deny_index(reason: &str) -> usize {
+    PROXY_DENY_REASONS
+        .iter()
+        .position(|&r| r == reason)
+        .unwrap_or(PROXY_DENY_REASON_COUNT - 1)
 }
 
 #[derive(Debug, Default)]
@@ -52,6 +85,7 @@ impl AuditSink {
             inner: Arc::new(Inner {
                 state: Mutex::new(SinkState::default()),
                 dropped: AtomicU64::new(0),
+                proxy_deny: std::array::from_fn(|_| AtomicU64::new(0)),
             }),
         }
     }
@@ -80,6 +114,33 @@ impl AuditSink {
     #[must_use]
     pub fn dropped(&self) -> u64 {
         self.inner.dropped.load(Ordering::Relaxed)
+    }
+
+    /// Per-reason `proxy_deny` counts for Prometheus (P17.2; fixed cardinality).
+    #[must_use]
+    pub fn proxy_deny_gauges(&self) -> Vec<(&'static str, u64)> {
+        PROXY_DENY_REASONS
+            .iter()
+            .enumerate()
+            .map(|(i, &reason)| {
+                (
+                    reason,
+                    self.inner.proxy_deny[i].load(Ordering::Relaxed),
+                )
+            })
+            .collect()
+    }
+
+    /// Count for one reason label (unknown → `"other"` bucket).
+    #[must_use]
+    pub fn proxy_deny_count(&self, reason: &str) -> u64 {
+        let i = proxy_deny_index(reason);
+        self.inner.proxy_deny[i].load(Ordering::Relaxed)
+    }
+
+    fn record_proxy_deny(&self, reason: &str) {
+        let i = proxy_deny_index(reason);
+        self.inner.proxy_deny[i].fetch_add(1, Ordering::Relaxed);
     }
 
     /// Hold the sink lock while `f` runs (unit tests: force try_lock drops).
@@ -196,6 +257,9 @@ impl AuditSink {
     }
 
     /// Proxy denial / security hygiene event (includes `request_id` when present).
+    ///
+    /// Always increments Prometheus `sedat_proxy_deny_total{reason=…}` even when
+    /// JSONL audit is disabled (P17.2).
     pub fn emit_proxy_deny(
         &self,
         reason: &str,
@@ -205,6 +269,7 @@ impl AuditSink {
         host: Option<&str>,
         path: Option<&str>,
     ) {
+        self.record_proxy_deny(reason);
         self.emit(json!({
             "event": "proxy_deny",
             "reason": reason,
@@ -439,6 +504,30 @@ mod tests {
         s.emit_proxy_deny("rate_limit", 429, "127.0.0.1:1", Some("abc"), None, None);
         assert!(!s.enabled());
         assert_eq!(s.dropped(), 0);
+        // Counters still advance when JSONL is off (P17.2).
+        assert_eq!(s.proxy_deny_count("rate_limit"), 1);
+    }
+
+    #[test]
+    fn proxy_deny_counters_fixed_cardinality() {
+        let s = AuditSink::disabled();
+        assert_eq!(s.proxy_deny_gauges().len(), PROXY_DENY_REASONS.len());
+        assert!(s.proxy_deny_gauges().iter().all(|(_, v)| *v == 0));
+
+        s.emit_proxy_deny("smuggling", 400, "127.0.0.1:1", None, None, None);
+        s.emit_proxy_deny("smuggling", 400, "127.0.0.1:2", None, None, None);
+        s.emit_proxy_deny("not_a_real_reason", 500, "127.0.0.1:3", None, None, None);
+
+        assert_eq!(s.proxy_deny_count("smuggling"), 2);
+        assert_eq!(s.proxy_deny_count("other"), 1);
+        assert_eq!(s.proxy_deny_count("rate_limit"), 0);
+        let gauges = s.proxy_deny_gauges();
+        assert_eq!(gauges.len(), PROXY_DENY_REASONS.len());
+        assert_eq!(
+            gauges.iter().find(|(r, _)| *r == "smuggling").unwrap().1,
+            2
+        );
+        assert_eq!(gauges.iter().find(|(r, _)| *r == "other").unwrap().1, 1);
     }
 
     #[test]

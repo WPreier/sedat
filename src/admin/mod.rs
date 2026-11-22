@@ -635,6 +635,14 @@ pub fn prometheus_text(state: &AdminState) -> String {
     for (key, v) in restart_required_gauges(&state.boot, &cfg) {
         out.push_str(&format!("sedat_restart_required{{key=\"{key}\"}} {v}\n"));
     }
+    // P17.2: fixed-cardinality HTTP-path security denials.
+    out.push_str(
+        "# HELP sedat_proxy_deny_total HTTP-path security denials by reason.\n\
+         # TYPE sedat_proxy_deny_total counter\n",
+    );
+    for (reason, v) in state.audit.proxy_deny_gauges() {
+        out.push_str(&format!("sedat_proxy_deny_total{{reason=\"{reason}\"}} {v}\n"));
+    }
     out
 }
 
@@ -710,6 +718,58 @@ mod tests {
         assert!(metrics.contains("sedat_uptime_seconds "));
         assert!(metrics.contains("# TYPE sedat_bans_active gauge"));
         assert!(metrics.contains("sedat_bans_active 0"));
+        assert!(metrics.contains("# TYPE sedat_proxy_deny_total counter"));
+        assert!(metrics.contains("sedat_proxy_deny_total{reason=\"rate_limit\"} 0"));
+        assert!(metrics.contains("sedat_proxy_deny_total{reason=\"other\"} 0"));
+    }
+
+    #[test]
+    fn metrics_expose_proxy_deny_counters() {
+        let state = sample_state();
+        let before = prometheus_text(&state);
+        assert!(
+            before.contains("sedat_proxy_deny_total{reason=\"smuggling\"} 0"),
+            "{before}"
+        );
+
+        state.audit.emit_proxy_deny(
+            "smuggling",
+            400,
+            "127.0.0.1:9",
+            Some("rid"),
+            None,
+            Some("/"),
+        );
+        state.audit.emit_proxy_deny(
+            "rate_limit",
+            429,
+            "127.0.0.1:9",
+            None,
+            None,
+            None,
+        );
+        state.audit.emit_proxy_deny(
+            "rate_limit",
+            429,
+            "127.0.0.1:10",
+            None,
+            None,
+            None,
+        );
+
+        let after = prometheus_text(&state);
+        assert!(
+            after.contains("sedat_proxy_deny_total{reason=\"smuggling\"} 1"),
+            "{after}"
+        );
+        assert!(
+            after.contains("sedat_proxy_deny_total{reason=\"rate_limit\"} 2"),
+            "{after}"
+        );
+        assert!(
+            after.contains("sedat_proxy_deny_total{reason=\"ip_banned\"} 0"),
+            "{after}"
+        );
     }
 
     #[test]

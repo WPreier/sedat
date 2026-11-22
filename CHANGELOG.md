@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.39] – 2026-11-22
+
+### Added
+
+- **P17.2 Prometheus proxy_deny counters:** expose fixed-cardinality
+  `sedat_proxy_deny_total{reason="…"}` (counts even when JSONL audit is off).
+  Phase note
+  [docs/phases/P17_02_proxy_deny_counters.md](docs/phases/P17_02_proxy_deny_counters.md).
+
 ## [0.1.38] – 2026-11-22
 
 ### Changed

@@ -12,8 +12,8 @@ commit + push/PR, wait for review.
 
 ```text
 P17.1 health vs ready (restart_required)  ← done (v0.1.38)
-P17.2 Prometheus proxy_deny counters      ← next
-P17.3 Prometheus proxy_reject counters
+P17.2 Prometheus proxy_deny counters      ← done (v0.1.39)
+P17.3 Prometheus proxy_reject counters    ← next
 P17.4 Prometheus rate_limit / ban hit counters
 P17.5 Selftest reports Landlock/seccomp mode
 ```
@@ -33,9 +33,9 @@ P17.5 Selftest reports Landlock/seccomp mode
 
 | | |
 |--|--|
-| **Status** | **planned** |
-| **Behavior** | Counter(s) for HTTP-path security denials (`proxy_deny` audit reasons) for T13/T4 scrape alerts |
-| **Depends on** | — |
+| **Status** | **done** (v0.1.39) |
+| **Behavior** | Fixed-cardinality `sedat_proxy_deny_total{reason="…"}` for HTTP-path security denials (counts even when JSONL off) |
+| **Phase note** | [phases/P17_02_proxy_deny_counters.md](phases/P17_02_proxy_deny_counters.md) |
 
 ### P17.3 – Prometheus `sedat_proxy_reject_total`
 
@@ -66,7 +66,7 @@ P17.5 Selftest reports Landlock/seccomp mode
 | Step | Item | Status |
 |------|------|--------|
 | 1 | health vs ready (restart_required) | **done** (v0.1.38) |
-| 2 | Prometheus proxy_deny counters | planned |
+| 2 | Prometheus proxy_deny counters | **done** (v0.1.39) |
 | 3 | Prometheus proxy_reject counters | planned |
 | 4 | Prometheus rate_limit / ban hit counters | planned |
 | 5 | Selftest Landlock/seccomp mode | planned |
