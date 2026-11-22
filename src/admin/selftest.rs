@@ -296,6 +296,23 @@ pub fn run_selftest(state: &AdminState) -> SelftestReport {
         },
     ));
 
+    // P17.5: report configured sandbox modes (fail only on invalid enum).
+    for (name, mode) in [
+        ("hardening_landlock", cfg.hardening.landlock.as_str()),
+        ("hardening_seccomp", cfg.hardening.seccomp.as_str()),
+    ] {
+        let ok = matches!(mode, "auto" | "off" | "required");
+        checks.push(check(
+            name,
+            ok,
+            if ok {
+                format!("mode={mode}")
+            } else {
+                format!("invalid mode={mode} (expected auto|off|required)")
+            },
+        ));
+    }
+
     checks.push(check_allowlists(&cfg));
     checks.extend(probe_upstreams(&cfg));
 
@@ -625,9 +642,41 @@ mod tests {
         assert!(reply.starts_with("OK selftest\n"), "{reply}");
         assert!(reply.contains("PASS proxy_v2_encode"));
         assert!(reply.contains("PASS allowlists"));
+        assert!(reply.contains("PASS hardening_landlock"));
+        assert!(reply.contains("PASS hardening_seccomp"));
         assert!(reply.contains("PASS restart_required"));
         assert!(reply.contains("PASS upstream_tcp"));
         assert!(reply.contains("PASS upstream_tls_alpn"));
+    }
+
+    #[test]
+    fn selftest_fails_invalid_sandbox_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = SedatConfig {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.state_dir = dir.path().to_string_lossy().into();
+        cfg.server.admin_socket = dir.path().join("admin.sock").to_string_lossy().into();
+        cfg.hardening.landlock = "strict".into();
+        cfg.hardening.seccomp = "required".into();
+        let state = state_with_cfg(cfg);
+        let report = run_selftest(&state);
+        assert!(!report.ok());
+        assert!(report.failed_names().contains(&"hardening_landlock".into()));
+        assert!(!report.failed_names().contains(&"hardening_seccomp".into()));
+        let reply = report.format_reply();
+        assert!(reply.contains("FAIL hardening_landlock"), "{reply}");
+        assert!(reply.contains("PASS hardening_seccomp mode=required"), "{reply}");
     }
 
     #[test]
