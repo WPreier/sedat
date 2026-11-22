@@ -341,6 +341,12 @@ impl Limiter {
         out
     }
 
+    /// Count of currently active temporary bans (P16.3 metrics).
+    #[must_use]
+    pub fn bans_active(&self) -> usize {
+        self.list_bans().len()
+    }
+
     /// Clear an active temporary ban. Returns `true` if the IP was banned.
     ///
     /// Also clears an already-expired ban marker; that still returns `false`

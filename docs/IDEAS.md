@@ -42,7 +42,7 @@ Durable list of follow-ups after **P10–P16**. Active promotion:
 | Stabilize Pebble ACME CI job | ENTRYPOINT + UA + pin (P15.1); instant-acme 0.8 optional token + unpin (P15.2) | **done P15.2** |
 | Prometheus gauge for restart-only drift | Scrapeable `sedat_restart_required{key=…}` from P15.3 snapshot | **done P16.1** |
 | `restart_required` on config_reload JSONL | SIEM field on successful reload when boot-bound knobs drift | **done P16.2** |
-| Prometheus uptime + bans_active gauges | `sedat_uptime_seconds` / `sedat_bans_active` for dashboards | **→ P16.3** |
+| Prometheus uptime + bans_active gauges | `sedat_uptime_seconds` / `sedat_bans_active` for dashboards | **done P16.3** |
 
 ### Admin / auth / selftest
 
