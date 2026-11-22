@@ -5,6 +5,14 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.37] – 2026-11-22
+
+### Added
+
+- **P16.3 Prometheus uptime + bans:** expose `sedat_uptime_seconds` and
+  `sedat_bans_active` gauges on admin/metrics. Phase note
+  [docs/phases/P16_03_uptime_bans_gauges.md](docs/phases/P16_03_uptime_bans_gauges.md).
+
 ## [0.1.36] – 2026-11-22
 
 ### Added

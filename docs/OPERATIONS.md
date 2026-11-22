@@ -173,6 +173,7 @@ echo selftest| socat - UNIX-CONNECT:/run/sedat/admin.sock
 - Includes `sedat_audit_dropped_total` (P11.4) for JSONL audit drops.
 - Includes `sedat_restart_required{key="…"}` gauges (P16.1) — `1` when live config
   drifts from boot for that restart-only knob (listen/sandbox/metrics/ACME-cold).
+- Includes `sedat_uptime_seconds` and `sedat_bans_active` (P16.3).
 - Script: `scripts/prometheus_admin_scrape.sh [admin.sock]` (Unix socket; uses `AUTH`).
 - No built-in public HTTP `/metrics` or `/health` control endpoint.
 

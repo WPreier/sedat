@@ -591,13 +591,21 @@ pub fn prometheus_text(state: &AdminState) -> String {
          sedat_inbound_proxy_after_tls {}\n\
          # HELP sedat_audit_dropped_total JSONL audit events dropped (lock busy or I/O error).\n\
          # TYPE sedat_audit_dropped_total counter\n\
-         sedat_audit_dropped_total {}\n",
+         sedat_audit_dropped_total {}\n\
+         # HELP sedat_uptime_seconds Seconds since process/admin start.\n\
+         # TYPE sedat_uptime_seconds gauge\n\
+         sedat_uptime_seconds {}\n\
+         # HELP sedat_bans_active Active temporary IP bans.\n\
+         # TYPE sedat_bans_active gauge\n\
+         sedat_bans_active {}\n",
         crate::VERSION,
         state.limiter.active_connections(),
         cfg.schema_version,
         u8::from(cfg.proxy_protocol.inbound_enabled),
         u8::from(cfg.proxy_protocol.inbound_placement == "after_tls"),
         state.audit.dropped(),
+        state.started_at.elapsed().as_secs(),
+        state.limiter.bans_active(),
     );
     // P16.1: fixed-cardinality restart-only drift (same keys as P15.3 selftest/status).
     out.push_str(
@@ -678,6 +686,60 @@ mod tests {
         assert!(metrics.contains("# TYPE sedat_restart_required gauge"));
         assert!(metrics.contains("sedat_restart_required{key=\"server.listen\"} 0"));
         assert!(metrics.contains("sedat_restart_required{key=\"acme.enable\"} 0"));
+        assert!(metrics.contains("# TYPE sedat_uptime_seconds gauge"));
+        assert!(metrics.contains("sedat_uptime_seconds "));
+        assert!(metrics.contains("# TYPE sedat_bans_active gauge"));
+        assert!(metrics.contains("sedat_bans_active 0"));
+    }
+
+    #[test]
+    fn metrics_expose_uptime_and_bans_active() {
+        use crate::config::LimitsConfig;
+        use crate::limits::RateOutcome;
+        use std::net::IpAddr;
+        use std::thread;
+        use std::time::Duration;
+
+        let limits = LimitsConfig {
+            rate_limit_per_ip: 1,
+            rate_limit_burst: 1,
+            ban_after_rate_limit_strikes: 2,
+            ban_duration_secs: 120,
+            ..Default::default()
+        };
+        let lim = Limiter::new(limits.clone());
+        let mut state = sample_state();
+        state.limiter = lim.clone();
+
+        let before = prometheus_text(&state);
+        assert!(before.contains("sedat_bans_active 0"), "{before}");
+        assert!(before.contains("sedat_uptime_seconds "), "{before}");
+
+        thread::sleep(Duration::from_millis(20));
+        let mid = prometheus_text(&state);
+        let uptime_line = mid
+            .lines()
+            .find(|l| l.starts_with("sedat_uptime_seconds "))
+            .expect("uptime gauge");
+        let secs: u64 = uptime_line
+            .split_whitespace()
+            .nth(1)
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(secs < 60, "unexpected uptime {secs}");
+
+        let ip: IpAddr = "203.0.113.77".parse().unwrap();
+        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Allow);
+        assert_eq!(
+            lim.check_rate(ip, &limits).outcome,
+            RateOutcome::RateLimited
+        );
+        assert_eq!(lim.check_rate(ip, &limits).outcome, RateOutcome::Banned);
+        assert_eq!(lim.bans_active(), 1);
+
+        let after = prometheus_text(&state);
+        assert!(after.contains("sedat_bans_active 1"), "{after}");
     }
 
     #[test]

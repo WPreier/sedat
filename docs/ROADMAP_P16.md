@@ -12,7 +12,7 @@ commit + push/PR, wait for review.
 ```text
 P16.1 Prometheus restart_required gauge   ← done (v0.1.35)
 P16.2 config_reload restart_required JSONL ← done (v0.1.36)
-P16.3 Prometheus uptime + bans_active     ← next
+P16.3 Prometheus uptime + bans_active     ← done (v0.1.37)
 … later: remaining ops/hardening …
 ```
 
@@ -40,9 +40,9 @@ P16.3 Prometheus uptime + bans_active     ← next
 
 | | |
 |--|--|
-| **Status** | **planned** |
-| **Behavior** | Expose `sedat_uptime_seconds` and `sedat_bans_active` gauges on admin/metrics for ops dashboards |
-| **Depends on** | — |
+| **Status** | **done** (v0.1.37) |
+| **Behavior** | Expose `sedat_uptime_seconds` and `sedat_bans_active` gauges on admin/metrics |
+| **Phase note** | [phases/P16_03_uptime_bans_gauges.md](phases/P16_03_uptime_bans_gauges.md) |
 
 ## Status board
 
@@ -50,4 +50,4 @@ P16.3 Prometheus uptime + bans_active     ← next
 |------|------|--------|
 | 1 | Prometheus restart_required gauge | **done** (v0.1.35) |
 | 2 | config_reload restart_required JSONL | **done** (v0.1.36) |
-| 3 | Prometheus uptime + bans_active | planned |
+| 3 | Prometheus uptime + bans_active | **done** (v0.1.37) |
