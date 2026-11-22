@@ -56,8 +56,12 @@ Not supported for production: privilege drop, Unix admin socket (use named alter
 |---------|---------|
 | Placeholder listen | `cargo run --example hello_listen` |
 | Config fail-closed | `cargo run --example config_demo` |
+| Minimales TOML | `examples/config/good.toml` |
+| Vollbeispiel TOML | `examples/config/full.example.toml` (siehe README dort) |
 | H1 proxy demo | see `examples/proxy_h1/` |
 | ACME staging | see `examples/acme_staging/` |
 | Hardening scripts | see `examples/hardening/` |
 | HTTP/3 | see `examples/http3/` (feature `http3`) |
 | E2E | see `examples/e2e_seda/` |
+
+Produktion / Update: [INSTALL.md](INSTALL.md) · [UPDATE.md](UPDATE.md) · [CONFIG.md](CONFIG.md) · [OPERATIONS.md](OPERATIONS.md).
