@@ -68,7 +68,7 @@ Detailed companion to the abridged table in [SECURITY.md](SECURITY.md). Fail-clo
 
 | Channel | Allowed |
 |---------|---------|
-| Admin socket commands `health`, `metrics`, `status` | Yes |
+| Admin socket commands `health` (liveness), `ready` (readiness; fails on restart-only drift — P17.1), `metrics`, `status` | Yes |
 | Loopback-only sidecar (`server.metrics_listen`) | Yes (validated loopback) |
 | `scripts/prometheus_admin_scrape.sh` | Yes |
 | Public HTTP `/metrics`, `/health` as SeDat control plane | **No** |

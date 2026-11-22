@@ -5,6 +5,16 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.38] – 2026-11-22
+
+### Changed
+
+- **P17.1 health vs ready:** `health` stays liveness (`OK healthy`, optional
+  `restart_required` note). `ready` is readiness and returns
+  `ERR not_ready restart_required=…` when boot-bound knobs drifted. Roadmap
+  [docs/ROADMAP_P17.md](docs/ROADMAP_P17.md); phase note
+  [docs/phases/P17_01_ready_restart_required.md](docs/phases/P17_01_ready_restart_required.md).
+
 ## [0.1.37] – 2026-11-22
 
 ### Added

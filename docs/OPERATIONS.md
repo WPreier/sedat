@@ -149,7 +149,7 @@ Unix-domain socket after bind:
 - **Bans (P11.1):** `bans` lists active temporary IP bans; `unban <ip>` clears one (JSONL `admin_unban`). See [phases/P11_01_admin_bans.md](phases/P11_01_admin_bans.md).
 
 ```bash
-# status / health / metrics / reload / reload-token / cert / selftest / bans / unban (Linux)
+# status / health / ready / metrics / reload / reload-token / cert / selftest / bans / unban (Linux)
 # With token:
 printf 'AUTH %s\nselftest\n' "$SEDAT_ADMIN_TOKEN" | socat - UNIX-CONNECT:/run/sedat/admin.sock
 printf 'AUTH %s\nbans\nunban 203.0.113.50\n' "$SEDAT_ADMIN_TOKEN" | socat - UNIX-CONNECT:/run/sedat/admin.sock
@@ -166,7 +166,8 @@ echo selftest| socat - UNIX-CONNECT:/run/sedat/admin.sock
 
 ## Health / metrics
 
-- Admin commands `health` / `metrics` (Prometheus text exposition).
+- Admin commands `health` (liveness) / `ready` (readiness; `ERR not_ready` when
+  `restart_required` drift — P17.1) / `metrics` (Prometheus text exposition).
 - Optional loopback HTTP sidecar (`GET /metrics`) when `metrics_listen` is set.
   With admin token configured: `Authorization: Bearer …` required (P12.1); see
   [phases/P12_01_metrics_sidecar_token.md](phases/P12_01_metrics_sidecar_token.md).
