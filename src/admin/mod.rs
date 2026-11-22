@@ -308,9 +308,9 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
     }
     if verb == "help" {
         let help = if token_required {
-            "commands: AUTH <token> | status | health | metrics | reload | reload-token | cert | selftest [json] | bans | unban <ip> | quit\n"
+            "commands: AUTH <token> | status | health | ready | metrics | reload | reload-token | cert | selftest [json] | bans | unban <ip> | quit\n"
         } else {
-            "commands: status | health | metrics | reload | reload-token | cert | selftest [json] | bans | unban <ip> | quit\n"
+            "commands: status | health | ready | metrics | reload | reload-token | cert | selftest [json] | bans | unban <ip> | quit\n"
         };
         return (help.into(), false);
     }
@@ -326,7 +326,8 @@ pub fn dispatch_admin_line(state: &AdminState, authed: &mut bool, line: &str) ->
 
     let reply = match verb.as_str() {
         "status" | "stats" => format_status(state),
-        "health" | "ready" => "OK healthy\n".to_string(),
+        "health" => format_health(state),
+        "ready" => format_ready(state),
         "metrics" => {
             let body = prometheus_text(state);
             format!("OK metrics\n{body}")
@@ -568,6 +569,25 @@ fn format_status(state: &AdminState) -> String {
         cfg.tls.enabled || cfg.acme.enabled,
         cfg.experimental.h3
     )
+}
+
+/// Liveness: process is up. Annotates `restart_required` but does not fail (P17.1).
+fn format_health(state: &AdminState) -> String {
+    let cfg = state.config.load();
+    let restart_note = format_restart_required_note(&restart_required_keys(&state.boot, &cfg));
+    format!("OK healthy{restart_note}\n")
+}
+
+/// Readiness: fail-closed when boot-bound config drifted vs live (P17.1).
+fn format_ready(state: &AdminState) -> String {
+    let cfg = state.config.load();
+    let keys = restart_required_keys(&state.boot, &cfg);
+    let restart_note = format_restart_required_note(&keys);
+    if keys.is_empty() {
+        format!("OK ready{restart_note}\n")
+    } else {
+        format!("ERR not_ready{restart_note}\n")
+    }
 }
 
 /// Prometheus text exposition (no `OK` prefix — for sidecar `/metrics`).
@@ -898,6 +918,25 @@ mod tests {
         let mut authed = false;
         let (r, _) = dispatch_admin_line(&state, &mut authed, "health");
         assert_eq!(r, "OK healthy\n");
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "ready");
+        assert_eq!(r, "OK ready\n");
+    }
+
+    #[test]
+    fn ready_fails_on_restart_required_drift() {
+        let state = sample_state();
+        let mut cfg = (*state.config.load_full()).clone();
+        cfg.server.listen = "127.0.0.1:18080".into();
+        state.config.store(Arc::new(cfg));
+
+        let mut authed = false;
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "health");
+        assert!(r.starts_with("OK healthy"), "{r}");
+        assert!(r.contains("restart_required=server.listen"), "{r}");
+
+        let (r, _) = dispatch_admin_line(&state, &mut authed, "ready");
+        assert!(r.starts_with("ERR not_ready"), "{r}");
+        assert!(r.contains("restart_required=server.listen"), "{r}");
     }
 
     #[test]

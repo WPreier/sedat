@@ -13,7 +13,7 @@ commit + push/PR, wait for review.
 P16.1 Prometheus restart_required gauge   ← done (v0.1.35)
 P16.2 config_reload restart_required JSONL ← done (v0.1.36)
 P16.3 Prometheus uptime + bans_active     ← done (v0.1.37)
-… later: remaining ops/hardening …
+… later: [ROADMAP_P17.md](ROADMAP_P17.md) …
 ```
 
 ## Step breakdown

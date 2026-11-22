@@ -12,8 +12,8 @@ See [ROADMAP_P09.md](ROADMAP_P09.md) and [ROADMAP_P10.md](ROADMAP_P10.md). Highl
 
 ## Deferred / Open backlog
 
-Durable list of follow-ups after **P10–P16**. Active promotion:
-[ROADMAP_P16.md](ROADMAP_P16.md) (P15 complete: [ROADMAP_P15.md](ROADMAP_P15.md)).
+Durable list of follow-ups after **P10–P17**. Active promotion:
+[ROADMAP_P17.md](ROADMAP_P17.md) (P16 complete: [ROADMAP_P16.md](ROADMAP_P16.md)).
 
 ### Explicitly deferred / declined
 
@@ -54,6 +54,10 @@ Durable list of follow-ups after **P10–P16**. Active promotion:
 | `selftest --json` | Machine-readable selftest output | **done P11.6** |
 | Allowlist parseable check in selftest | Validate `upstream_allowlist` / PROXY CIDRs | **done P11.6** |
 | Restart-required drift on status/reload/selftest | Boot snapshot vs live; annotate + fail selftest | **done P15.3** |
+| Split health vs ready on restart_required | Liveness always OK; readiness fails on boot drift | **done P17.1** |
+| Prometheus proxy_deny / proxy_reject counters | Scrapeable abuse counters (T1/T12/T13) | **→ P17.2–P17.3** |
+| Prometheus rate_limit / ban hit counters | Flood visibility | **→ P17.4** |
+| Selftest Landlock/seccomp mode detail | Operator clarity for T10 sandbox | **→ P17.5** |
 
 ### Proxy / upstream / request-id
 
