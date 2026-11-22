@@ -15,7 +15,7 @@ P17.1 health vs ready (restart_required)  ← done (v0.1.38)
 P17.2 Prometheus proxy_deny counters      ← done (v0.1.39)
 P17.3 Prometheus proxy_reject counters    ← done (v0.1.40)
 P17.4 Prometheus rate_limit / ban hit counters ← done (v0.1.41)
-P17.5 Selftest reports Landlock/seccomp mode ← next
+P17.5 Selftest reports Landlock/seccomp mode ← done (v0.1.42)
 ```
 
 ## Step breakdown
@@ -26,7 +26,6 @@ P17.5 Selftest reports Landlock/seccomp mode ← next
 |--|--|
 | **Status** | **done** (v0.1.38) |
 | **Behavior** | `health` = liveness (`OK healthy`, optional `restart_required` note). `ready` = readiness; `ERR not_ready restart_required=…` when boot-bound knobs drifted (same keys as P15.3) |
-| **Why** | Threat-model health channel currently always succeeds; operators using only `health`/`ready` miss P15/P16 drift signals |
 | **Phase note** | [phases/P17_01_ready_restart_required.md](phases/P17_01_ready_restart_required.md) |
 
 ### P17.2 – Prometheus `sedat_proxy_deny_total`
@@ -34,7 +33,7 @@ P17.5 Selftest reports Landlock/seccomp mode ← next
 | | |
 |--|--|
 | **Status** | **done** (v0.1.39) |
-| **Behavior** | Fixed-cardinality `sedat_proxy_deny_total{reason="…"}` for HTTP-path security denials (counts even when JSONL off) |
+| **Behavior** | Fixed-cardinality `sedat_proxy_deny_total{reason="…"}` for HTTP-path security denials |
 | **Phase note** | [phases/P17_02_proxy_deny_counters.md](phases/P17_02_proxy_deny_counters.md) |
 
 ### P17.3 – Prometheus `sedat_proxy_reject_total`
@@ -57,9 +56,9 @@ P17.5 Selftest reports Landlock/seccomp mode ← next
 
 | | |
 |--|--|
-| **Status** | **planned** |
-| **Behavior** | Selftest check reports effective `hardening.landlock` / `hardening.seccomp` (informational PASS with detail; fail only on invalid enum) — T10 operator clarity |
-| **Depends on** | — |
+| **Status** | **done** (v0.1.42) |
+| **Behavior** | Selftest checks `hardening_landlock` / `hardening_seccomp` (PASS with mode detail; FAIL on invalid enum) |
+| **Phase note** | [phases/P17_05_selftest_sandbox_modes.md](phases/P17_05_selftest_sandbox_modes.md) |
 
 ## Status board
 
@@ -69,4 +68,4 @@ P17.5 Selftest reports Landlock/seccomp mode ← next
 | 2 | Prometheus proxy_deny counters | **done** (v0.1.39) |
 | 3 | Prometheus proxy_reject counters | **done** (v0.1.40) |
 | 4 | Prometheus rate_limit / ban hit counters | **done** (v0.1.41) |
-| 5 | Selftest Landlock/seccomp mode | planned |
+| 5 | Selftest Landlock/seccomp mode | **done** (v0.1.42) |
