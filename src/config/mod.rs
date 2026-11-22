@@ -5,7 +5,10 @@ mod migrate;
 mod schema;
 mod validate;
 
-pub use diff::{format_audit_summary, security_diff, SecurityChange};
+pub use diff::{
+    format_audit_summary, format_restart_required_note, restart_required_keys, security_diff,
+    RestartOnlySnapshot, SecurityChange,
+};
 pub use migrate::{migrate_toml, migration_path, peek_schema_version, upgrade_notes};
 pub use schema::*;
 pub use validate::{

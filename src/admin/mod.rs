@@ -9,6 +9,7 @@ pub use auth::{
     DEFAULT_TOKEN_OVERLAP_SECS,
 };
 pub use selftest::{now_start, run_selftest, SelftestCheck, SelftestReport};
+pub use crate::config::RestartOnlySnapshot;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -20,7 +21,10 @@ use tracing::{info, warn};
 
 use crate::acme::AcmeStatus;
 use crate::audit::AuditSink;
-use crate::config::{self, format_audit_summary, security_diff, SedatConfig};
+use crate::config::{
+    self, format_audit_summary, format_restart_required_note, restart_required_keys, security_diff,
+    SedatConfig,
+};
 use crate::limits::Limiter;
 use crate::tls::TlsState;
 
@@ -47,6 +51,8 @@ pub struct AdminState {
     pub audit: AuditSink,
     /// Process/admin start time (uptime for selftest).
     pub started_at: Instant,
+    /// Restart-only knobs as bound/applied at process start (P15.3 drift detection).
+    pub boot: RestartOnlySnapshot,
 }
 
 /// Apply admin socket filesystem ACL: `0600` owner-only, or `0660` + group when configured.
@@ -412,9 +418,19 @@ pub fn apply_live_reload(state: &AdminState) -> String {
                     " token=kept_fail_closed".into()
                 }
             };
+            let restart_keys = restart_required_keys(&state.boot, &active.config);
+            if !restart_keys.is_empty() {
+                warn!(
+                    keys = %restart_keys.join(","),
+                    "config reload has restart-only drift; process restart required for those keys"
+                );
+            }
+            let restart_note = format_restart_required_note(&restart_keys);
             state.audit.emit_config_reload(&changes, &summary);
             state.config.store(Arc::new(active.config));
-            format!("OK reload audit={summary}{token_note}{cert_note}{ban_note}{acme_note}\n")
+            format!(
+                "OK reload audit={summary}{token_note}{cert_note}{ban_note}{acme_note}{restart_note}\n"
+            )
         }
         Err(e) => format!("ERR reload: {e}\n"),
     }
@@ -541,8 +557,9 @@ fn admin_unban(state: &AdminState, args: &str) -> String {
 
 fn format_status(state: &AdminState) -> String {
     let cfg = state.config.load();
+    let restart_note = format_restart_required_note(&restart_required_keys(&state.boot, &cfg));
     format!(
-        "OK sedat {} connections={} listen={} tls_enabled={} h3={}\n",
+        "OK sedat {} connections={} listen={} tls_enabled={} h3={}{restart_note}\n",
         crate::VERSION,
         state.limiter.active_connections(),
         cfg.server.listen,
@@ -602,6 +619,7 @@ mod tests {
     fn sample_state_with(cfg: SedatConfig, audit: AuditSink) -> AdminState {
         std::env::remove_var(ADMIN_TOKEN_ENV);
         let tokens = LiveAdminTokens::from_config(&cfg);
+        let boot = RestartOnlySnapshot::from_boot(&cfg, false);
         AdminState {
             user_config: "x".into(),
             state_dir: "y".into(),
@@ -613,6 +631,7 @@ mod tests {
             acme_status: None,
             audit,
             started_at: now_start(),
+            boot,
         }
     }
 
@@ -636,13 +655,28 @@ mod tests {
     #[test]
     fn status_format() {
         let state = sample_state();
-        assert!(format_status(&state).starts_with("OK sedat"));
+        let status = format_status(&state);
+        assert!(status.starts_with("OK sedat"), "{status}");
+        assert!(!status.contains("restart_required="), "{status}");
         let metrics = prometheus_text(&state);
         assert!(metrics.contains("sedat_connections_active"));
         assert!(metrics.contains("sedat_schema_version 1"));
         assert!(metrics.contains("# TYPE sedat_info gauge"));
         assert!(metrics.contains("# TYPE sedat_audit_dropped_total counter"));
         assert!(metrics.contains("sedat_audit_dropped_total 0"));
+    }
+
+    #[test]
+    fn status_reports_restart_required_drift() {
+        let state = sample_state();
+        let mut cfg = (*state.config.load_full()).clone();
+        cfg.server.listen = "127.0.0.1:18080".into();
+        cfg.hardening.landlock = "required".into();
+        state.config.store(Arc::new(cfg));
+        let status = format_status(&state);
+        assert!(status.contains("restart_required="), "{status}");
+        assert!(status.contains("server.listen"), "{status}");
+        assert!(status.contains("hardening.landlock"), "{status}");
     }
 
     #[test]
@@ -919,6 +953,7 @@ upstream = "http://127.0.0.1:9"
         let tls_state = TlsState::new(sc);
         let limiter = Limiter::new(active.config.limits.clone());
         let tokens = LiveAdminTokens::from_config(&active.config);
+        let boot = RestartOnlySnapshot::from_boot(&active.config, false);
         let state = AdminState {
             user_config: user.clone(),
             state_dir: state_dir.clone(),
@@ -930,6 +965,7 @@ upstream = "http://127.0.0.1:9"
             acme_status: None,
             audit: AuditSink::disabled(),
             started_at: now_start(),
+            boot,
         };
 
         // Point files at cert B and raise connection cap.

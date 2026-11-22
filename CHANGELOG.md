@@ -5,6 +5,15 @@ All notable changes to SeDat are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.34] – 2026-11-22
+
+### Added
+
+- **P15.3 Restart-required drift:** boot snapshot of listen/sandbox/metrics/ACME-cold
+  knobs; admin `status`/`reload` annotate `restart_required=…` and selftest fails
+  when live config drifts. Next: [docs/ROADMAP_P16.md](docs/ROADMAP_P16.md). Phase note
+  [docs/phases/P15_03_restart_required_drift.md](docs/phases/P15_03_restart_required_drift.md).
+
 ## [0.1.33] – 2026-11-22
 
 ### Changed

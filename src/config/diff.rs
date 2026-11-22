@@ -353,6 +353,83 @@ pub fn format_audit_summary(changes: &[SecurityChange]) -> String {
         .join("; ")
 }
 
+/// Process-bound knobs that cannot be applied by live reload (P15.3).
+///
+/// Captured once at boot so operators can see when a successful `reload` still
+/// requires a process restart for listen/sandbox/metrics/ACME-cold.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestartOnlySnapshot {
+    /// Bound plain HTTP listen address.
+    pub listen: String,
+    /// Bound HTTPS listen address.
+    pub listen_tls: String,
+    /// Bound HTTP→HTTPS redirect listen address.
+    pub http_redirect_listen: String,
+    /// Metrics sidecar bind (`None`/empty = not started).
+    pub metrics_listen: String,
+    /// Landlock mode applied at boot.
+    pub landlock: String,
+    /// Seccomp mode applied at boot.
+    pub seccomp: String,
+    /// Whether an ACME renewal loop was started at boot.
+    pub acme_started: bool,
+}
+
+impl RestartOnlySnapshot {
+    /// Snapshot restart-only fields from the config used to start the process.
+    #[must_use]
+    pub fn from_boot(cfg: &SedatConfig, acme_started: bool) -> Self {
+        Self {
+            listen: cfg.server.listen.clone(),
+            listen_tls: cfg.server.listen_tls.clone(),
+            http_redirect_listen: cfg.server.http_redirect_listen.clone(),
+            metrics_listen: cfg.server.metrics_listen.clone().unwrap_or_default(),
+            landlock: cfg.hardening.landlock.clone(),
+            seccomp: cfg.hardening.seccomp.clone(),
+            acme_started,
+        }
+    }
+}
+
+/// Keys that changed vs boot and still need a process restart to take effect.
+#[must_use]
+pub fn restart_required_keys(boot: &RestartOnlySnapshot, cfg: &SedatConfig) -> Vec<&'static str> {
+    let mut keys = Vec::new();
+    if boot.listen != cfg.server.listen {
+        keys.push("server.listen");
+    }
+    if boot.listen_tls != cfg.server.listen_tls {
+        keys.push("server.listen_tls");
+    }
+    if boot.http_redirect_listen != cfg.server.http_redirect_listen {
+        keys.push("server.http_redirect_listen");
+    }
+    let metrics = cfg.server.metrics_listen.clone().unwrap_or_default();
+    if boot.metrics_listen != metrics {
+        keys.push("server.metrics_listen");
+    }
+    if boot.landlock != cfg.hardening.landlock {
+        keys.push("hardening.landlock");
+    }
+    if boot.seccomp != cfg.hardening.seccomp {
+        keys.push("hardening.seccomp");
+    }
+    if !boot.acme_started && cfg.acme.enabled {
+        keys.push("acme.enable");
+    }
+    keys
+}
+
+/// Compact suffix for admin reload/status replies (` restart_required=a,b` or empty).
+#[must_use]
+pub fn format_restart_required_note(keys: &[&str]) -> String {
+    if keys.is_empty() {
+        String::new()
+    } else {
+        format!(" restart_required={}", keys.join(","))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -375,5 +452,34 @@ mod tests {
     fn empty_when_identical() {
         let a = parse_toml(crate::DEFAULT_CONFIG_TOML).unwrap();
         assert!(security_diff(&a, &a).is_empty());
+    }
+
+    #[test]
+    fn restart_required_detects_listen_and_acme_cold() {
+        let a = parse_toml(crate::DEFAULT_CONFIG_TOML).unwrap();
+        let boot = RestartOnlySnapshot::from_boot(&a, false);
+        assert!(restart_required_keys(&boot, &a).is_empty());
+
+        let mut b = a.clone();
+        b.server.listen = "127.0.0.1:18080".into();
+        b.hardening.seccomp = "required".into();
+        b.acme.enabled = true;
+        let keys = restart_required_keys(&boot, &b);
+        assert!(keys.contains(&"server.listen"));
+        assert!(keys.contains(&"hardening.seccomp"));
+        assert!(keys.contains(&"acme.enable"));
+        assert_eq!(
+            format_restart_required_note(&keys),
+            format!(" restart_required={}", keys.join(","))
+        );
+    }
+
+    #[test]
+    fn restart_required_skips_acme_when_loop_started() {
+        let a = parse_toml(crate::DEFAULT_CONFIG_TOML).unwrap();
+        let boot = RestartOnlySnapshot::from_boot(&a, true);
+        let mut b = a.clone();
+        b.acme.enabled = true;
+        assert!(!restart_required_keys(&boot, &b).contains(&"acme.enable"));
     }
 }

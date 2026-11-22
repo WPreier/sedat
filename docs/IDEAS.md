@@ -12,8 +12,8 @@ See [ROADMAP_P09.md](ROADMAP_P09.md) and [ROADMAP_P10.md](ROADMAP_P10.md). Highl
 
 ## Deferred / Open backlog
 
-Durable list of follow-ups after **P10–P14**. Active promotion:
-[ROADMAP_P15.md](ROADMAP_P15.md) (P14 complete: [ROADMAP_P14.md](ROADMAP_P14.md)).
+Durable list of follow-ups after **P10–P15**. Active promotion:
+[ROADMAP_P16.md](ROADMAP_P16.md) (P15 complete: [ROADMAP_P15.md](ROADMAP_P15.md)).
 
 ### Explicitly deferred / declined
 
@@ -40,6 +40,7 @@ Durable list of follow-ups after **P10–P14**. Active promotion:
 | PROXY-Rejects (pre-HTTP) as JSONL event | JSONL `proxy_reject` with reason/stage | **done P11.3** |
 | Zeitbasierte Log-Rotation neben Size-Rotate | Age-based rotate for `audit_jsonl` | **done P12.4** |
 | Stabilize Pebble ACME CI job | ENTRYPOINT + UA + pin (P15.1); instant-acme 0.8 optional token + unpin (P15.2) | **done P15.2** |
+| Prometheus gauge for restart-only drift | Scrapeable `sedat_restart_required` from P15.3 snapshot | **→ P16.1** |
 
 ### Admin / auth / selftest
 
@@ -50,6 +51,7 @@ Durable list of follow-ups after **P10–P14**. Active promotion:
 | Selftest: Upstream-TCP + TLS-ALPN | Deeper connectivity checks | **done P11.6** |
 | `selftest --json` | Machine-readable selftest output | **done P11.6** |
 | Allowlist parseable check in selftest | Validate `upstream_allowlist` / PROXY CIDRs | **done P11.6** |
+| Restart-required drift on status/reload/selftest | Boot snapshot vs live; annotate + fail selftest | **done P15.3** |
 
 ### Proxy / upstream / request-id
 

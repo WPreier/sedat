@@ -11,7 +11,9 @@ use rustls::ClientConfig;
 use serde_json::json;
 
 use crate::admin::AdminState;
-use crate::config::{is_allowlist_entry, parse_cidr, CURRENT_SCHEMA_VERSION};
+use crate::config::{
+    is_allowlist_entry, parse_cidr, restart_required_keys, CURRENT_SCHEMA_VERSION,
+};
 use crate::proxy::encode_proxy_v2;
 use crate::tls::ensure_crypto_provider;
 
@@ -297,6 +299,17 @@ pub fn run_selftest(state: &AdminState) -> SelftestReport {
     checks.push(check_allowlists(&cfg));
     checks.extend(probe_upstreams(&cfg));
 
+    let restart_keys = restart_required_keys(&state.boot, &cfg);
+    checks.push(check(
+        "restart_required",
+        restart_keys.is_empty(),
+        if restart_keys.is_empty() {
+            "none".into()
+        } else {
+            format!("keys={}", restart_keys.join(","))
+        },
+    ));
+
     let uptime_secs = state.started_at.elapsed().as_secs();
     checks.push(check("uptime", true, format!("secs={uptime_secs}")));
 
@@ -571,6 +584,7 @@ mod tests {
 
     fn state_with_cfg(cfg: SedatConfig) -> AdminState {
         let tokens = crate::admin::LiveAdminTokens::from_config(&cfg);
+        let boot = crate::admin::RestartOnlySnapshot::from_boot(&cfg, false);
         AdminState {
             user_config: "x".into(),
             state_dir: cfg.server.state_dir.clone().into(),
@@ -582,6 +596,7 @@ mod tests {
             acme_status: None,
             audit: AuditSink::disabled(),
             started_at: now_start(),
+            boot,
         }
     }
 
@@ -610,8 +625,36 @@ mod tests {
         assert!(reply.starts_with("OK selftest\n"), "{reply}");
         assert!(reply.contains("PASS proxy_v2_encode"));
         assert!(reply.contains("PASS allowlists"));
+        assert!(reply.contains("PASS restart_required"));
         assert!(reply.contains("PASS upstream_tcp"));
         assert!(reply.contains("PASS upstream_tls_alpn"));
+    }
+
+    #[test]
+    fn selftest_fails_restart_required_drift() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut cfg = SedatConfig {
+            schema_version: CURRENT_SCHEMA_VERSION,
+            server: Default::default(),
+            tls: Default::default(),
+            acme: Default::default(),
+            routes: Default::default(),
+            proxy_protocol: Default::default(),
+            limits: Default::default(),
+            embedded_docs: Default::default(),
+            experimental: Default::default(),
+            logging: Default::default(),
+            hardening: Default::default(),
+        };
+        cfg.server.state_dir = dir.path().to_string_lossy().into();
+        cfg.server.admin_socket = dir.path().join("admin.sock").to_string_lossy().into();
+        let state = state_with_cfg(cfg);
+        let mut live = (*state.config.load_full()).clone();
+        live.server.metrics_listen = Some("127.0.0.1:19100".into());
+        state.config.store(Arc::new(live));
+        let report = run_selftest(&state);
+        assert!(!report.ok());
+        assert!(report.failed_names().contains(&"restart_required".into()));
     }
 
     #[test]
